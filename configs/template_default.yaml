@@ -1,0 +1,21 @@
+view_type: 1
+collect:
+  camera: yes
+  obd: no
+  can: no
+  phone: no
+
+cameras:
+  ids: [1, 2]
+  default:
+    res: [1280, 720]
+    fps: 30
+    cv2_codec: XVID
+    view_height: 720
+
+obd:
+  commands: ["RPM", "SPEED", "THROTTLE_POS"]
+
+phone:
+  ip: 0
+  port: 8080
