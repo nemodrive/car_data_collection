@@ -1,4 +1,13 @@
 from argparse import Namespace
+import yaml
+
+
+def get_closest_index(df, timestamp):
+    idx = df.index.get_loc(timestamp, method="nearest")
+    data_point = df.iloc[idx]
+    found_tp = data_point.name
+    dif_tp = timestamp - found_tp
+    return data_point, idx, dif_tp
 
 
 def namespace_to_dict(namespace):
@@ -10,6 +19,14 @@ def namespace_to_dict(namespace):
         else:
             dct[key] = value
     return dct
+
+
+def read_cfg(config_file):
+    """ Parse yaml type config file. """
+    with open(config_file) as handler:
+        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+    cfg = dict_to_namespace(config_data)
+    return cfg
 
 
 def dict_to_namespace(dct):
