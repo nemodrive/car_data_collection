@@ -1,3 +1,8 @@
+# Andrei, 2018
+"""
+    Collect data.
+"""
+
 from argparse import ArgumentParser
 import os
 import time
@@ -9,16 +14,15 @@ import subprocess
 import signal
 from subprocess import PIPE
 from argparse import Namespace
-from pprint import pprint
 import shutil
 
-from utils import get_nonblocking
-from camera import get_camera
-from can import get_can
-from obd import get_obd
-from phone import get_phone
+from utils import get_nonblocking, read_cfg
+from get_camera import get_camera
+from get_can import get_can
+from get_obd import get_obd
+from get_phone import get_phone
 
-MULTI_LOGS_CMD = 'terminator --command="multiline {}/*log"'
+MULTI_LOGS_CMD = 'gnome-terminal -x sh -c "multitail "{}/*.log; bash""'
 TAIL_LOG = 'terminator --command="tail {}"'
 WAIT_QUIT = 10
 
@@ -40,6 +44,8 @@ def show_logs(cfg):
         plog("No logs to view.")
         return 0
 
+    plog(logs)
+
     # Configure view Mode
     if show == 0:
         cmd = MULTI_LOGS_CMD.format(out_dir)
@@ -55,8 +61,12 @@ def show_logs(cfg):
     else:
         return 1
 
-    pro = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, bufsize=1, shell=True,
-                           preexec_fn=os.setsid)
+    if show == 0:
+        pro = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, bufsize=1, shell=True,
+                               preexec_fn=os.setsid)
+    elif show == 1:
+        pro = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, bufsize=1, shell=True,
+                               preexec_fn=os.setsid)
 
     # Wait for closing command
     while True:
@@ -64,6 +74,8 @@ def show_logs(cfg):
         time.sleep(1)
         if res:
             os.killpg(os.getpgid(pro.pid), signal.SIGTERM)
+            pro.kill()
+            pro.terminate()
             break
 
     return 0
@@ -81,7 +93,7 @@ if __name__ == "__main__":
         help='Default configuration file'
     )
     arg_parser.add_argument(
-        '--out-dir', default='data/', type=str, dest="out_dir"
+        '--out-dir', default='/home/andrei/STYU', type=str, dest="out_dir"
     )
     arg_parser.add_argument(
         '--log-name', default='log', type=str, dest="log_name"
@@ -118,9 +130,7 @@ if __name__ == "__main__":
         view = view_only
 
     # Read config
-    with open(config_file) as handler:
-        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
-    cfg = dict_to_namespace(config_data)
+    cfg = read_cfg(config_file)
     collect = cfg.collect
     plog("Collect data:")
     plog(collect)
@@ -145,7 +155,7 @@ if __name__ == "__main__":
 
     # TODO show & get names of cameras (v4l2-ctl --list-devices)
     if collect.camera:
-        cameras_cfg = cfg.cameras
+        cameras_cfg = cfg.camera
         cameras_ind_cfg = []
         camera_out_que = []
         for id in cameras_cfg.ids:
@@ -154,7 +164,7 @@ if __name__ == "__main__":
             new_cfg.id = id
 
             camera_out_que.append(mp.Queue(maxsize=100))
-            new_cfg.que = camera_out_que[-1]
+            new_cfg.queue = camera_out_que[-1]
             cameras_ind_cfg.append(new_cfg)
 
         # Init cameras
@@ -196,6 +206,7 @@ if __name__ == "__main__":
         new_cfg = get_default_cfg()
         all_que.append(mp.Queue(maxsize=100))
         new_cfg.obd = cfg.obd
+        new_cfg.queue = all_que[-1]
 
         all_proc.append(mp.Process(target=get_obd, args=(new_cfg,)))
         all_proc[-1].start()
@@ -203,7 +214,7 @@ if __name__ == "__main__":
     # ==============================================================================================
 
     # Wait for everything to start
-    time.sleep(3)
+    time.sleep(10)
 
     # ==============================================================================================
     # -- Visualize logs
