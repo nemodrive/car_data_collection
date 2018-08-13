@@ -330,8 +330,23 @@ class VideoLoad:
 
 if __name__ == "__main__":
     import numpy as np
+    from argparse import Namespace
 
-    v = VideoLoad("data/1533228223_log/camera_0.mkv")
+    cfg_extra = Namespace()
+    cfg_extra.rvec = [0., 0., 0.]
+    cfg_extra.tvec = [0., 0., 0.]
+    cfg_extra.y_pos = 0.26
+    cfg_extra.wheel_w = 0.19
+    cfg_extra.car_offset_x = 0.
+    cfg_extra.max_z = 10.
+    cfg_extra.matrix = 0
+
+    v = VideoLoad("data/1533228223_log", "camera_0",
+                  cfg_extra, view_height=700,
+                  flip_view=0)
+
+    start_tp = 1533228233.465851
+    video_fps = 25.
 
     frame = v.next_frame()
     r = None
@@ -344,27 +359,56 @@ if __name__ == "__main__":
         r = chr(k % 256)
         return r
 
-    freq_tp = [1, 10, 30]
-    freq_id = 0
-    freq = freq_tp[freq_id]
-    while r != "q":
-        r = get_key()
+    # -- Get frame by frame
+    do = False
+    if do:
+        freq_tp = [1, 10, 30]
+        freq_id = 0
+        freq = freq_tp[freq_id]
 
-        if r == ",":
-            # Next frame
-            for _ in range(freq):
-                frame = v.prev_frame()
-            v.show(frame)
-        elif r == ".":
-            # Prev frame
-            for _ in range(freq):
-                frame = v.next_frame()
-            v.show(frame)
-        elif r == "f":
-            freq_id = (freq_id + 1) % len(freq_tp)
-            freq = freq_tp[freq_id]
-            print("Speed: {}".format(freq))
+        while r != "q":
+            r = get_key()
 
+            if r == ",":
+                # Next frame
+                for _ in range(freq):
+                    frame = v.prev_frame()
+                v.show(frame)
+            elif r == ".":
+                # Prev frame
+                for _ in range(freq):
+                    frame = v.next_frame()
+                v.show(frame)
+            elif r == "f":
+                freq_id = (freq_id + 1) % len(freq_tp)
+                freq = freq_tp[freq_id]
+                print("Speed: {}".format(freq))
+
+    do = True
+    if do:
+        freq = 1 / float(video_fps)
+        r = None
+        crt_tp = start_tp
+
+        # plt.ion()
+        # plt.show()
+
+        while r != "q":
+            r = get_key()
+
+            if r == ".":
+                # Add fps
+                crt_tp += freq
+            elif r == ",":
+                # Prev frame
+                crt_tp -= freq
+            elif r == "f":
+                freq_id = (freq_id + 1) % len(freq_tp)
+                freq = freq_tp[freq_id]
+                print("Speed: {}".format(freq))
+
+            dif_tp, frame = v.get_closest(crt_tp)
+            v.show(frame)
 
 # vid = cv2.VideoCapture("data/1533228223_log/camera_0.mkv")
 # select_rand = [123, 3000, 6341, 7123, 9341, 8412, 5131, 11123, 12341]
@@ -378,100 +422,102 @@ if __name__ == "__main__":
 #         bck[frame_no] = frame
 #
 
-if __name__ == "__main__":
-    import cv2
-    import numpy as np
-    vid = cv2.VideoCapture("data/1533228223_log/camera_0.mkv")
-    ret = True
-    frame_no = 0
-    while ret:
-        ret, frame = vid.read()
 
-    frame_cpy = frame.copy()
-
-    resolution = [1280., 720.]
-    a_w, a_h = 16., 9.  # Aspect ratio
-    w, h = resolution
-    d_fov = 120.
-    h_fov = np.rad2deg(2. * np.arctan(np.tan(np.deg2rad(d_fov)/2.) * np.cos(np.arctan(a_h / a_w))))
-    v_fov = np.rad2deg(2. * np.arctan(np.tan(np.deg2rad(d_fov)/2.) * np.sin(np.arctan(a_h / a_w))))
-
-    # x and y are the X and Y dimensions of the image produced
-    #   by the camera, measured from the center of the image
-    x = w/2.
-    y = h/2.
-
-    # axis skew
-    s = 0.
-
-    # focal lengths of the camera in the X and Y directions
-    # given the FOV a_x in the horizontal direction
-    f_x = x / np.tan(np.deg2rad(h_fov) / 2.)
-    f_y = y / np.tan(np.deg2rad(v_fov) / 2.)
-
-    f_x = x / np.tan(np.deg2rad(57.5) / 2.)
-    f_y = y / np.tan(np.deg2rad(45) / 2.)
-
-
-    camera_matrix = np.array(
-        [
-            [f_x, s, x],
-            [0, f_y, y],
-            [0, 0, 1.]
-        ]
-    )
-
-    rvec = np.array([0,0,0], np.float) # rotation vector
-    tvec = np.array([0,0,0], np.float) # translation vector
-
-
-    def points_in_circum(r, n=1000, get=1):
-        n = int(n * r)
-        l = [(math.cos(2 * np.pi / n * x) * r, math.sin(2 * np.pi / n * x) * r) for x in
-             xrange(0, int((n + 1)/ 4.))]
-        l = np.array(l)
-
-        g = (l[:, 1] < get).sum()
-        print(g)
-        l = l[:g]
-        return l
-
-
-    y_pos = 0.26
-    wheel_w = 0.19
-    car_offset_x = 0.
-    max_z = 10.
-    # circ = points_in_circum(100)
-    # pts3d = np.concatenate([circ[:, 0].reshape((-1, 1)),
-    #                         np.zeros((circ.shape[0], 1)),
-    #                         circ[:, 1].reshape((-1, 1))], axis=1)
-    #
-    # pts3d[:, 0] = pts3d[:, 0] * wheel_w
-    # pts3d[:, 1] = y_pos
-    # pts3d[:, 2] = pts3d[:, 2] * max_z
-    # print (pts3d[0])
-    # print (pts3d[-1])
-    pts3d = np.array([
-        [wheel_w, y_pos, 0.0],
-        [wheel_w, y_pos, 10.0],
-        [-wheel_w, y_pos, 0.0],
-        [-wheel_w, y_pos, 10.0]
-    ])
-    pts3d[:, 0] = pts3d[:, 0] + car_offset_x
-
-    frame = frame_cpy.copy()
-    imagePoints, jacobian = cv2.projectPoints(pts3d, rvec, tvec, camera_matrix, None)
-    frame[int(y-1): int(y+1)] = 0
-    frame[:, int(x-1): int(x+1)] = 0
-
-    for i in range(1, imagePoints.shape[0], 2):
-        frame = cv2.line(frame,
-                         tuple(imagePoints[i-1, 0].astype(np.int)),
-                         tuple(imagePoints[i, 0].astype(np.int)),
-                         (0, 0, 255), thickness=1)
-    # frame = cv2.line(frame,
-    #                  tuple(imagePoints[2, 0].astype(np.int)), tuple(imagePoints[3, 0].astype(
-    #         np.int)),
-    #                  (0, 0, 255), thickness=2)
-
-    cv2.imshow("Test", frame); cv2.waitKey(0); cv2.destroyAllWindows()
+# if __name__ == "__main__":
+#     import cv2
+#     import numpy as np
+#
+#     vid = cv2.VideoCapture("data/1533228223_log/camera_0.mkv")
+#     ret = True
+#     frame_no = 0
+#     while ret:
+#         ret, frame = vid.read()
+#
+#     frame_cpy = frame.copy()
+#
+#     resolution = [1280., 720.]
+#     a_w, a_h = 16., 9.  # Aspect ratio
+#     w, h = resolution
+#     d_fov = 120.
+#     h_fov = np.rad2deg(2. * np.arctan(np.tan(np.deg2rad(d_fov)/2.) * np.cos(np.arctan(a_h / a_w))))
+#     v_fov = np.rad2deg(2. * np.arctan(np.tan(np.deg2rad(d_fov)/2.) * np.sin(np.arctan(a_h / a_w))))
+#
+#     # x and y are the X and Y dimensions of the image produced
+#     #   by the camera, measured from the center of the image
+#     x = w/2.
+#     y = h/2.
+#
+#     # axis skew
+#     s = 0.
+#
+#     # focal lengths of the camera in the X and Y directions
+#     # given the FOV a_x in the horizontal direction
+#     f_x = x / np.tan(np.deg2rad(h_fov) / 2.)
+#     f_y = y / np.tan(np.deg2rad(v_fov) / 2.)
+#
+#     f_x = x / np.tan(np.deg2rad(57.5) / 2.)
+#     f_y = y / np.tan(np.deg2rad(45) / 2.)
+#
+#
+#     camera_matrix = np.array(
+#         [
+#             [f_x, s, x],
+#             [0, f_y, y],
+#             [0, 0, 1.]
+#         ]
+#     )
+#
+#     rvec = np.array([0,0,0], np.float) # rotation vector
+#     tvec = np.array([0,0,0], np.float) # translation vector
+#
+#
+#     def points_in_circum(r, n=1000, get=1):
+#         n = int(n * r)
+#         l = [(math.cos(2 * np.pi / n * x) * r, math.sin(2 * np.pi / n * x) * r) for x in
+#              xrange(0, int((n + 1)/ 4.))]
+#         l = np.array(l)
+#
+#         g = (l[:, 1] < get).sum()
+#         print(g)
+#         l = l[:g]
+#         return l
+#
+#
+#     y_pos = 0.26
+#     wheel_w = 0.19
+#     car_offset_x = 0.
+#     max_z = 10.
+#     # circ = points_in_circum(100)
+#     # pts3d = np.concatenate([circ[:, 0].reshape((-1, 1)),
+#     #                         np.zeros((circ.shape[0], 1)),
+#     #                         circ[:, 1].reshape((-1, 1))], axis=1)
+#     #
+#     # pts3d[:, 0] = pts3d[:, 0] * wheel_w
+#     # pts3d[:, 1] = y_pos
+#     # pts3d[:, 2] = pts3d[:, 2] * max_z
+#     # print (pts3d[0])
+#     # print (pts3d[-1])
+#     pts3d = np.array([
+#         [wheel_w, y_pos, 0.0],
+#         [wheel_w, y_pos, 10.0],
+#         [-wheel_w, y_pos, 0.0],
+#         [-wheel_w, y_pos, 10.0]
+#     ])
+#     pts3d[:, 0] = pts3d[:, 0] + car_offset_x
+#
+#     frame = frame_cpy.copy()
+#     imagePoints, jacobian = cv2.projectPoints(pts3d, rvec, tvec, camera_matrix, None)
+#     frame[int(y-1): int(y+1)] = 0
+#     frame[:, int(x-1): int(x+1)] = 0
+#
+#     for i in range(1, imagePoints.shape[0], 2):
+#         frame = cv2.line(frame,
+#                          tuple(imagePoints[i-1, 0].astype(np.int)),
+#                          tuple(imagePoints[i, 0].astype(np.int)),
+#                          (0, 0, 255), thickness=1)
+#     # frame = cv2.line(frame,
+#     #                  tuple(imagePoints[2, 0].astype(np.int)), tuple(imagePoints[3, 0].astype(
+#     #         np.int)),
+#     #                  (0, 0, 255), thickness=2)
+#
+#     cv2.imshow("Test", frame); cv2.waitKey(0); cv2.destroyAllWindows()
