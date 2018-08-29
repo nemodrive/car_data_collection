@@ -77,10 +77,34 @@ if __name__ == "__main__":
 
         if collect.camera:
             print ("------")
+            frames = []
             for v in video_loders:
                 dif_tp, frame = v.get_closest(crt_tp)
+                frames.append(frame)
                 # print (dif_tp)
                 v.show(frame)
+
+            stereo0 = cv2.StereoBM_create(numDisparities=16, blockSize=15)
+            stereo1 = cv2.StereoBM_create(numDisparities=16, blockSize=15)
+            gray0 = cv2.cvtColor(frames[0]["frame"], cv2.COLOR_BGR2GRAY)
+            gray1 = cv2.cvtColor(frames[1]["frame"], cv2.COLOR_BGR2GRAY)
+            gray2 = cv2.cvtColor(frames[2]["frame"], cv2.COLOR_BGR2GRAY)
+            disparity0 = stereo0.compute(gray0, gray1)
+            disparity0 = disparity0 + disparity0.min()
+            disparity0 = disparity0 / float(disparity0.max())
+            disparity0 = (disparity0 * 255).astype(np.uint8)
+            disparity1 = stereo1.compute(gray1, gray2)
+            disparity1 = disparity1 + disparity1.min()
+            disparity1 = disparity1 / float(disparity1.max())
+            disparity1 = (disparity1 * 255).astype(np.uint8)
+            print (disparity0)
+            # plt.imshow(disparity0, 'gray')
+            # plt.imshow(disparity1, 'gray')
+            # plt.show()
+
+            cv2.imshow("Disparity0", disparity0)
+            cv2.imshow("Disparity1", disparity1)
+
         if collect.obd:
             obd_data = obd_loader.get_closest(crt_tp)
 

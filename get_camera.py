@@ -326,8 +326,6 @@ class VideoLoad:
         return True
 
 
-
-
 if __name__ == "__main__":
     import numpy as np
     from argparse import Namespace
@@ -341,9 +339,7 @@ if __name__ == "__main__":
     cfg_extra.max_z = 10.
     cfg_extra.matrix = 0
 
-    v = VideoLoad("data/1533228223_log", "camera_0",
-                  cfg_extra, view_height=700,
-                  flip_view=0)
+    v = VideoLoad("data/1533228223_log", "camera_0", cfg_extra, view_height=700, flip_view=0)
 
     start_tp = 1533228233.465851
     video_fps = 25.
