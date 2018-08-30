@@ -4,7 +4,6 @@ import json
 import argparse
 from websocket_server import WebsocketServer
 import utm
-import pymap3d as pm
 from math import radians, cos, sin, asin, sqrt
 
 from modules.localization.proto import gps_pb2
@@ -159,7 +158,7 @@ class LocalizationProcessing:
         return d
 
     def get_imu(self, data):
-        d = imu_pb2.Imu()
+        d = imu_pb2.CorrectedImu()
 
         d.header.timestamp_sec = rospy.get_time()
         d.measurement_time = rospy.get_time()
@@ -230,11 +229,11 @@ def publish_phone(cfg):
 if __name__ == '__main__':
     cfg = argparse.Namespace()
     cfg.ip = 0
-    cfg.port = 8080
+    cfg.port = 8081
     cfg.queue_size = 1
     cfg.topics = dict({
         "gps": ("/apollo/sensor/gnss/odometry", gps_pb2.Gps),
-        "imu": ("/apollo/sensor/gnss/imu", imu_pb2.Imu)
+        "imu": ("/apollo/sensor/gnss/imu", imu_pb2.CorrectedImu)
     })
 
     try:
