@@ -4,6 +4,7 @@ import json
 import argparse
 from websocket_server import WebsocketServer
 import utm
+import pymap3d as pm
 from math import radians, cos, sin, asin, sqrt
 
 from modules.localization.proto import gps_pb2
@@ -240,3 +241,28 @@ if __name__ == '__main__':
         publish_phone()
     except rospy.ROSInterruptException:
         pass
+
+    import numpy as np
+
+    # Test gpst ->
+    with open("data/odo_imu_demo_2.5") as f:
+        data = json.load(f)
+
+    odo = data['/apollo/sensor/gnss/odometry']
+
+    points = []
+    tps = []
+    speed = []
+    for i in range(10):
+        lat, lon = utm.to_latlon(odo[i]["localization"]["position"]["x"],
+                                 odo[i]["localization"]["position"]["y"], 32, "C")
+        x, y, z = pm.geodetic2ecef(odo[i]["localization"]["position"]["x"],
+                                   odo[i]["localization"]["position"]["y"],
+                                   odo[i]["localization"]["position"]["z"])
+        points.append(np.array([x,y,z]))
+        tps.append(odo[i]["timestamp"])
+
+        if i > 0:
+            speed.append((points[-1] - points[-2]) / (tps[-1] - tps[-2]))
+
+        x, y, z = pm.geodetic2ecef()
