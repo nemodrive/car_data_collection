@@ -1,5 +1,9 @@
-from argparse import ArgumentParser
+# Andrei, 2018
+"""
+    Interactive script to playback video to ros specified ros topic.
+"""
 
+from argparse import ArgumentParser
 import rospy
 import cv2
 from sensor_msgs.msg import Image
