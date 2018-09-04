@@ -1,15 +1,26 @@
 #!/usr/bin/env python
+"""
+    Install
+        pip install utm, websocket_server
+"""
 import rospy
 import json
 import argparse
 from websocket_server import WebsocketServer
 import utm
 from math import radians, cos, sin, asin, sqrt
+import numpy as np
+import importlib
 
 from modules.localization.proto import gps_pb2
 from modules.localization.proto import imu_pb2
 
-LOG = False
+LOG = True
+
+
+def get_class(module_name, class_name):
+    module = importlib.import_module(module_name)
+    return getattr(module, class_name)
 
 
 def haversine(lon1, lat1, lon2, lat2):
@@ -118,47 +129,77 @@ class LocalizationProcessing:
         self.last_location_update = dict({"timestamp": -1})
         self.prev_location_update = dict({"timestamp": -1})
         self.speed_from_gps = [0., 0., 0.]
+        self.topic_processing = dict({
+            "gps": self.get_gps,
+            "imu": self.get_imu
+        })
+        self.topic_type = dict({})
 
     def ingest(self, data):
         self.prev_data = self.last_data
         self.last_data = data
-        if data["location"]["timestamp"] > self.last_location_update["timestamp"]:
+        if data["loc_tp"] > self.last_location_update["timestamp"]:
             self.prev_location_update = self.last_location_update
-            self.last_location_update = data["location"]
 
+            easting, northing, zone_no, zone_letter = utm.from_latlon(
+                data["location"]["x"],  data["location"]["y"])
 
-        pass
+            self.last_location_update = dict({
+                "timestamp": data["loc_tp"],
+                "longitude": data["location"]["x"],
+                "latitude": data["location"]["y"],
+                "altitude": data["location"]["z"],
+                "easting": easting,
+                "northing": northing,
+                "zone_no": zone_no,
+                "zone_letter": zone_letter
+            })
+
+            last_location = self.last_location_update
+            prev_location = self.prev_location_update
+            if len(prev_location) > 1:
+                self.speed_from_gps = np.array([
+                    last_location[x] - prev_location[x]
+                    for x in ["easting", "northing", "altitude"]])
+                self.speed_from_gps = abs(self.speed_from_gps) / \
+                                      float(data["loc_tp"] - prev_location["timestamp"]) * 1000
 
     def get_topic(self, topic):
-        pass
+        data = self.topic_processing[topic]()
+        return data
 
-    def get_gps(self, data):
-        d = gps_pb2.Gps()
+    def register_topic_type(self, topic, topic_type):
+        self.topic_type[topic] = topic_type
+
+    def get_gps(self):
+        data = self.last_data
+
+        d = self.topic_type["gps"]()
 
         d.header.timestamp_sec = rospy.get_time()
 
         # Position
-        gps = data["gps"]
-        wgs = utm.from_latlon(gps["x"], gps["y"])
-        d.localization.position = dict({
-            "x": wgs[0],
-            "y": wgs[1],
-            "z": wgs[2],
-        })
+        last_location = self.last_location_update
+        d.localization.position.x = last_location["easting"]
+        d.localization.position.y = last_location["northing"]
+        d.localization.position.z = last_location["altitude"]
 
         # Orientation
-        gyro_attitude = data["gyro_attitude"]
-        d.localization.orientation = dict({
-            "qx": gyro_attitude["x"],
-            "qy": gyro_attitude["y"],
-            "qz": gyro_attitude["z"],
-            "qw": gyro_attitude["w"],
-        })
+        gyro_attitude = data["attitude"]
+        d.localization.orientation.qx = gyro_attitude["x"]
+        d.localization.orientation.qy = gyro_attitude["y"]
+        d.localization.orientation.qz = gyro_attitude["z"]
+        d.localization.orientation.qw = gyro_attitude["w"]
 
+        speed = self.speed_from_gps
+        d.localization.linear_velocity.x = speed[0]
+        d.localization.linear_velocity.y = speed[1]
+        d.localization.linear_velocity.z = speed[2]
         return d
 
-    def get_imu(self, data):
-        d = imu_pb2.CorrectedImu()
+    def get_imu(self):
+        data = self.last_data
+        d = self.topic_type["imu"]()
 
         d.header.timestamp_sec = rospy.get_time()
         d.measurement_time = rospy.get_time()
@@ -166,23 +207,21 @@ class LocalizationProcessing:
 
         # Linear acceleration
         # TODO check if necessary with or without he gravity acc
-        accelerometer = data["accelerometer"]
-        d.linear_acceleration = dict({
-            "x": accelerometer["x"],
-            "y": accelerometer["y"],
-            "z": accelerometer["z"],
-        })
+        accelerometer = data["userAcceleration"]
+
+        d.linear_acceleration.x = accelerometer["x"]
+        d.linear_acceleration.y = accelerometer["y"]
+        d.linear_acceleration.z = accelerometer["z"]
 
         # Angular velocity
-        gyro_rotation = data["gyro_rotation"]
-        d.angular_velocity = dict({
-            "x": gyro_rotation["x"],
-            "y": gyro_rotation["y"],
-            "z": gyro_rotation["z"],
-        })
+        gyro_rotation = data["rotationRateUnbiased"]
+        d.angular_velocity.x = gyro_rotation["x"]
+        d.angular_velocity.y = gyro_rotation["y"]
+        d.angular_velocity.z = gyro_rotation["z"]
+        return d
 
     def has_topic(self, topic):
-        return False
+        return topic in self.topic_processing.keys()
 
 
 def publish_phone(cfg):
@@ -198,9 +237,13 @@ def publish_phone(cfg):
 
     # Generate publishers
     publishers = dict()
-    for topic, (topic_path, topic_type) in topics.items:
+    for topic, topic_data in topics.items():
+        topic_path, topic_type = topic_data
         if localization.has_topic(topic):
-            publishers[topic] = rospy.Publisher(topic_path, topic_type, queue_size=queue_size)
+            topic_class = get_class(*topic_type)
+            localization.register_topic_type(topic, topic_class)
+            publishers[topic] = rospy.Publisher(topic_path, topic_class, queue_size=queue_size)
+            plog("Registered {}".format(topic))
 
     if ip == 0:
         ip = get_local_ip()
@@ -214,54 +257,41 @@ def publish_phone(cfg):
         plog("Client(%d) said: %s" % (client['id'], message))
 
         # message
-        msg_data = json.loads(message)
+        try:
+            msg_data = json.loads(message)
 
-        # Ingest data point
-        localization.ingest(msg_data)
-        for topic, publisher in publishers.items():
-            topic_data = localization.get_topic(topic)
-            publisher.publish(topic_data)
+            # Ingest data point
+            localization.ingest(msg_data)
+            for topic, publisher in publishers.items():
+                topic_data = localization.get_topic(topic)
+                publisher.publish(topic_data)
+                plog("Published: {}".format(topic))
+        except Exception:
+            pass
 
     # Start server:
-    run_server(ip, port, message_received, new_client, client_diconnected)
+    # run_server(ip, port, message_received, new_client, client_diconnected)
+    server = WebsocketServer(port, host=ip)
+    server.set_fn_new_client(new_client)
+    server.set_fn_client_left(client_diconnected)
+    server.set_fn_message_received(message_received)
+    server.run_forever()
+
+    rospy.spin()
 
 
 if __name__ == '__main__':
+    # Config -
     cfg = argparse.Namespace()
     cfg.ip = 0
-    cfg.port = 8081
+    cfg.port = 8090
     cfg.queue_size = 1
     cfg.topics = dict({
-        "gps": ("/apollo/sensor/gnss/odometry", gps_pb2.Gps),
-        "imu": ("/apollo/sensor/gnss/imu", imu_pb2.CorrectedImu)
+        "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
+        "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
     })
 
     try:
-        publish_phone()
-    except rospy.ROSInterruptException:
+        publish_phone(cfg)
+    except KeyboardInterrupt:
         pass
-
-    # import numpy as np
-    #
-    # # Test gpst ->
-    # with open("data/odo_imu_demo_2.5") as f:
-    #     data = json.load(f)
-    #
-    # odo = data['/apollo/sensor/gnss/odometry']
-    #
-    # points = []
-    # tps = []
-    # speed = []
-    # for i in range(10):
-    #     lat, lon = utm.to_latlon(odo[i]["localization"]["position"]["x"],
-    #                              odo[i]["localization"]["position"]["y"], 32, "C")
-    #     x, y, z = pm.geodetic2ecef(odo[i]["localization"]["position"]["x"],
-    #                                odo[i]["localization"]["position"]["y"],
-    #                                odo[i]["localization"]["position"]["z"])
-    #     points.append(np.array([x,y,z]))
-    #     tps.append(odo[i]["timestamp"])
-    #
-    #     if i > 0:
-    #         speed.append((points[-1] - points[-2]) / (tps[-1] - tps[-2]))
-    #
-    #     x, y, z = pm.geodetic2ecef()
