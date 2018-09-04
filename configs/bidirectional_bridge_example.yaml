@@ -6,10 +6,10 @@ queue_size: 10
 # if end_topic_name is not set same name will be used
 
 remote_topics: [
-  ["/remote_topic", ["std_msgs.msg", "String"]],
-  ["/remote_topic2", ["std_msgs.msg", "String"]]
+  ["/camera_short/image_raw", ["sensor_msgs.msg", "Image"], "/camera_short/image_raw"],
+  ["/player_vehicle", ["std_msgs.msg", "String"], "/player_vehicle"]
 ]
 
 local_topics: [
-  ["/local_topic",  ["std_msgs.msg", "String"], "/from_the_other_side"]
+  ["/carla_control",  ["std_msgs.msg", "String"], "/carla_control"]
 ]

@@ -11,6 +11,7 @@
         pip install twisted
     Client:
         'pip install ws4py' or see: https://ws4py.readthedocs.io/en/latest/sources/install/
+        pip install rospy_message_converter
 
     Use:
         Server side:
@@ -28,7 +29,8 @@ import rospy
 import importlib
 import yaml
 from argparse import Namespace
-
+import json
+from rospy_message_converter import message_converter
 
 def read_cfg(config_file):
     """ Parse yaml type config file. """
@@ -62,6 +64,8 @@ class RosbridgeClient(WebSocketClient):
             self.parent_class = kwargs.pop('parent_class')
 
         super(RosbridgeClient, self).__init__(*args, **kwargs)
+        self.encoder = json.JSONEncoder()
+        self.decoder = json.JSONDecoder()
 
     def opened(self):
         print("Connection opened...")
@@ -116,7 +120,9 @@ class BidirectionalRosbridge:
         self.ws = ws
 
         self.local_topics = cfg.local_topics
+        self.local_topics_type = dict({})
         self.remote_topics = cfg.remote_topics
+        self.remote_topics_type = dict({})
         self.publishers = dict({})
 
         rospy.init_node(self.name, anonymous=True)
@@ -131,6 +137,7 @@ class BidirectionalRosbridge:
                 raise ValueError('Unknown format.')
 
             topic_type_class = get_class(*topic_type)
+            self.local_topics_type[topic_name] = topic_type_class
 
             self.configure_local_bridge(topic_name, topic_type_class, topic_out)
 
@@ -144,6 +151,7 @@ class BidirectionalRosbridge:
                 raise ValueError('Unknown format.')
 
             topic_type_class = get_class(*topic_type)
+            self.remote_topics_type[topic_name] = topic_type_class
 
             self.configure_remote_bridge(topic_name, topic_type_class, topic_out)
 
@@ -158,7 +166,8 @@ class BidirectionalRosbridge:
                                                       queue_size=self.queue_size)
 
     def new_message(self, topic_name, msg):
-        self.publishers[topic_name].publish(msg["data"])
+        data = message_converter.convert_dictionary_to_ros_message(self.remote_topics_type[topic_name]._type, msg)
+        self.publishers[topic_name].publish(data)
 
     def run(self):
         rospy.spin()
