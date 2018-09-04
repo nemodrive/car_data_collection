@@ -12,9 +12,6 @@ from math import radians, cos, sin, asin, sqrt
 import numpy as np
 import importlib
 
-from modules.localization.proto import gps_pb2
-from modules.localization.proto import imu_pb2
-
 LOG = True
 
 
@@ -229,6 +226,18 @@ def publish_phone(cfg):
     port = cfg.port
     queue_size = cfg.queue_size
     topics = cfg.topics
+    save_mode = cfg.save_mode
+    simulate = cfg.simulate
+
+    if simulate:
+        save_mode = False
+
+    if save_mode:
+        import os
+        import time
+        save_path = cfg.save_path
+        out_file_path = os.path.join(save_path, "phone_node_{}".format(time.time()))
+        out_file = open(out_file_path, "w")
 
     rospy.init_node('publish_phone', anonymous=True)
 
@@ -266,18 +275,30 @@ def publish_phone(cfg):
                 topic_data = localization.get_topic(topic)
                 publisher.publish(topic_data)
                 plog("Published: {}".format(topic))
+            if save_mode:
+                out_file.write(message)
+                out_file.write("\n")
+
         except Exception:
             pass
 
     # Start server:
     # run_server(ip, port, message_received, new_client, client_diconnected)
-    server = WebsocketServer(port, host=ip)
-    server.set_fn_new_client(new_client)
-    server.set_fn_client_left(client_diconnected)
-    server.set_fn_message_received(message_received)
-    server.run_forever()
+    if not simulate:
+        server = WebsocketServer(port, host=ip)
+        server.set_fn_new_client(new_client)
+        server.set_fn_client_left(client_diconnected)
+        server.set_fn_message_received(message_received)
+        rospy.spin()
 
-    rospy.spin()
+        server.run_forever()
+    else:
+        client = dict({"id": -1})
+
+        with open(simulate) as f:
+            data_msgs = f.readlines()
+            for msg in data_msgs:
+                message_received(client, None, msg)
 
 
 if __name__ == '__main__':
@@ -286,9 +307,13 @@ if __name__ == '__main__':
     cfg.ip = 0
     cfg.port = 8090
     cfg.queue_size = 1
+    cfg.save_mode = False
+    cfg.save_path = "data/phone_node"
+    cfg.simulate = "data/phone_node/phone_node_1536070874.9"
+
     cfg.topics = dict({
-        "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
-        "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
+        # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
+        # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
     })
 
     try:
