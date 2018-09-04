@@ -320,3 +320,25 @@ if __name__ == '__main__':
         publish_phone(cfg)
     except KeyboardInterrupt:
         pass
+
+    """
+    # -- Local load
+    import pandas as pd
+    f = open("data/phone_node/phone_node_1536070874.9", "r")
+    msgs = f.readlines()
+    msgs_json = []
+    for msg in msgs:
+        msg_data = None
+        try:
+            msg_data = json.loads(msg)
+        except Exception:
+            pass
+
+        if msg_data is not None:
+            msgs_json.append(msg_data)
+
+    df = pd.DataFrame(msgs_json)
+    df["longitude"] = df["location"].apply(lambda x: x["x"])
+    df["latitude"] = df["location"].apply(lambda x: x["y"])
+    df["altitude"] = df["location"].apply(lambda x: x["z"])
+    """
