@@ -6,9 +6,7 @@ queue_size: 10
 # if end_topic_name is not set same name will be used
 
 remote_topics: [
-  ["/lidar_0", ["sensor_msgs.msg", "PointCloud2"], "/lidar_0"],
-  ["/camera_long/image_raw", ["sensor_msgs.msg", "Image"], "/camera_long/image_raw"],
-  ["/camera_short/image_raw", ["sensor_msgs.msg", "Image"], "/camera_short/image_raw"]
+  ["/camera_short/image_raw", ["sensor_msgs.msg", "Image"], "/camera_short/image_raw"],
   ["/player_vehicle", ["std_msgs.msg", "String"], "/player_vehicle"]
 ]
 
