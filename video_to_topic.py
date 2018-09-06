@@ -1,6 +1,10 @@
 # Andrei, 2018
 """
     Interactive script to playback video to ros specified ros topic.
+
+    sudo python -m pip install --upgrade pip setuptools wheel
+    sudo /usr/local/bin/pip install opencv-python
+
 """
 
 from argparse import ArgumentParser
@@ -32,6 +36,7 @@ if __name__ == "__main__":
     vid = cv2.VideoCapture(args.video_path)
     vid_fps = vid.get(cv2.CAP_PROP_FPS)
     total_frames = vid.get(cv2.CAP_PROP_FRAME_COUNT)
+    start_pos = float(start_pos)
 
     if start_pos != 0.:
         vid_start_pos = int(total_frames * start_pos)
@@ -64,7 +69,7 @@ if __name__ == "__main__":
 
     # Start publisher
     rospy.init_node('image_converter', anonymous=True)
-    image_pub = rospy.Publisher(args.topic_out, Image)
+    image_pub = rospy.Publisher(args.topic_out, Image, queue_size=1)
     bridge = CvBridge()
 
     last_show_tp = 0
@@ -72,13 +77,20 @@ if __name__ == "__main__":
     print("")
     print("Start show ...")
     frame_cnt = 0
+    seq = 1
     while ret and not rospy.is_shutdown():
         show_frame = cv2.resize(frame, (out_w, out_h))
         try:
             wait_time = max(0., frame_space - (time.time() - last_show_tp))
             time.sleep(wait_time)
-            image_pub.publish(bridge.cv2_to_imgmsg(frame, "bgr8"))
+            img_msg = bridge.cv2_to_imgmsg(frame, "bgr8")
+            img_msg.header.seq = seq
+            img_msg.header.frame_id = "usb_cam"
+            img_msg.header.stamp = rospy.Time.now()
+
+            image_pub.publish(img_msg)
             last_show_tp = time.time()
+            seq += 1
         except CvBridgeError as e:
             print(e)
 
@@ -89,7 +101,7 @@ if __name__ == "__main__":
 
         skip_frames += skip_frames_add
         if frame_cnt % vid_fps == 0:
-            sys.stdout.write("\rPos in video: {:0.4f}".format(frame_cnt/float(total_frames)))
+            sys.stdout.write("\rPos in video: {:0.4f}".format(frame_cnt / float(total_frames)))
             sys.stdout.flush()
 
     vid.release()
