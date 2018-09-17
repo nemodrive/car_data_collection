@@ -109,6 +109,7 @@ def run_server(i_ip_address, i_port, i_message_received, i_new_client, i_client_
         rotationRateUnbiased	Returns unbiased rotation rate as measured by the device's gyroscope.
         userAcceleration	Returns the acceleration that the user is giving to the device.
         acceleration	Last measured linear acceleration of a device in three-dimensional space.covariance
+        updateInterval	Sets or retrieves gyroscope interval in seconds.
 
     compass:
         headingAccuracy	Accuracy of heading reading in degrees.
@@ -116,6 +117,38 @@ def run_server(i_ip_address, i_port, i_message_received, i_new_client, i_client_
         rawVector	The raw geomagnetic data measured in microteslas. (Read Only)
         timestamp	Timestamp (in seconds since 1970) when the heading was last time updated.
         trueHeading	The heading in degrees relative to the geographic North Pole.
+
+    acceleration	Last measured linear acceleration of a device in three-dimensional space.
+ 
+    PhoneCollection app -> Dictionary:
+        -Location
+        -longitude, latitude, altitude
+        Vector3 location;
+        // Timestamp (in seconds since 1970) when location was last time updated
+        public double loc_tp;
+        // horizontal, veritcal accuracy 
+        public Vector2 loc_accuracy;
+    
+        // -- Gyroscope
+        public Quaternion attitude;
+        public Vector3 gra  vity;
+        public Vector3 rotationRate;
+        public Vector3 rotationRateUnbiased;
+        public float updateInterval;
+        public Vector3 userAcceleration;
+    
+        // -- Magnetometer
+        public float headingAccuracy;
+        public float magneticHeading;
+        public Vector3 rawVector;
+        public double mag_tp;
+        public float trueHeading;
+    
+        // -- Acceleration
+        public Vector3 acceleration;
+    
+        public double update_tp;
+}
 
 """
 
@@ -139,6 +172,7 @@ class LocalizationProcessing:
         if data["loc_tp"] > self.last_location_update["timestamp"]:
             self.prev_location_update = self.last_location_update
 
+            # WGS84 conversion from lat_lon GPS
             easting, northing, zone_no, zone_letter = utm.from_latlon(
                 data["location"]["x"],  data["location"]["y"])
 
@@ -200,8 +234,10 @@ class LocalizationProcessing:
         d = self.topic_type["imu"]()
 
         d.header.timestamp_sec = rospy.get_time()
-        d.measurement_time = rospy.get_time()
-        d.measurement_span = rospy.get_time()
+
+        # TODO what is this? I do not know what to fill it with
+        d.measurement_time = 0
+        d.measurement_span = 0
 
         # Linear acceleration
         # TODO check if necessary with or without he gravity acc
@@ -390,13 +426,20 @@ if __name__ == '__main__':
     cfg.queue_size = 1
     cfg.save_mode = False
     cfg.save_path = "data/phone_node"
-    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
+
+    cfg.simulate = ""
+    cfg.simulate = "data/phone_node/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
-        "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
+        # "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
-        "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']]
+
+        # "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']]
+
+        # "gps": ["/apollo/sensor/gnss/odometry", ["nav_msgs.msg", "Odometry"]],
+        # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
+
     })
 
     try:
@@ -404,24 +447,38 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
 
-    """
-    # -- Local load
-    import pandas as pd
-    f = open("data/phone_node/phone_node_1536070874.9", "r")
-    msgs = f.readlines()
-    msgs_json = []
-    for msg in msgs:
-        msg_data = None
-        try:
-            msg_data = json.loads(msg)
-        except Exception:
-            pass
 
-        if msg_data is not None:
-            msgs_json.append(msg_data)
-
-    df = pd.DataFrame(msgs_json)
-    df["longitude"] = df["location"].apply(lambda x: x["x"])
-    df["latitude"] = df["location"].apply(lambda x: x["y"])
-    df["altitude"] = df["location"].apply(lambda x: x["z"])
-    """
+    # # -- Local load
+    # import pandas as pd
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+    # import json
+    # import numpy as np
+    #
+    # # matplotlib.use('TkAgg')
+    #
+    # pd.set_option('display.height', 1000)
+    # pd.set_option('display.max_rows', 500)
+    # pd.set_option('display.max_columns', 500)
+    # pd.set_option('display.width', 1000)
+    #
+    # f = open("data/phone_node/phone_node_1536070874.9", "r")
+    # msgs = f.readlines()
+    # msgs_json = []
+    # for msg in msgs:
+    #     msg_data = None
+    #     try:
+    #         msg_data = json.loads(msg)
+    #     except Exception:
+    #         pass
+    #
+    #     if msg_data is not None:
+    #         msgs_json.append(msg_data)
+    #
+    # df = pd.DataFrame(msgs_json)
+    # df["longitude"] = df["location"].apply(lambda x: x["x"])
+    # df["latitude"] = df["location"].apply(lambda x: x["y"])
+    # df["altitude"] = df["location"].apply(lambda x: x["z"])
+    #
+    # plt.scatter(df["longitude"], df["latitude"], s=0.1)
+    # plt.show()
