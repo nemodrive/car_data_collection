@@ -131,7 +131,7 @@ def run_server(i_ip_address, i_port, i_message_received, i_new_client, i_client_
     
         // -- Gyroscope
         public Quaternion attitude;
-        public Vector3 gra  vity;
+        public Vector3 gravity;
         public Vector3 rotationRate;
         public Vector3 rotationRateUnbiased;
         public float updateInterval;
@@ -162,7 +162,8 @@ class LocalizationProcessing:
         self.speed_from_gps = [0., 0., 0.]
         self.topic_processing = dict({
             "gps": self.ros_get_gps,
-            "imu": self.ros_get_imu
+            "imu": self.ros_get_imu,
+            "magnet": self.get_magnetometer
         })
         self.topic_type = dict({})
 
@@ -184,7 +185,8 @@ class LocalizationProcessing:
                 "easting": easting,
                 "northing": northing,
                 "zone_no": zone_no,
-                "zone_letter": zone_letter
+                "zone_letter": zone_letter,
+                "magnet_raw_vector": data["rawVector"]
             })
 
             last_location = self.last_location_update
@@ -289,14 +291,29 @@ class LocalizationProcessing:
 
         return d
 
+    def get_magnetometer(self):
+        d = self.topic_type["magnet"]()
+
+        # Header
+        d.header.stamp = rospy.get_rostime()
+        d.header.frame_id = 'base_link'
+
+        # Magnetic field
+        last = self.last_location_update
+        print(last["magnet_raw_vector"])
+        d.magnetic_field.x = last["magnet_raw_vector"]['x']
+        d.magnetic_field.y = last["magnet_raw_vector"]['y']
+        d.magnetic_field.z = last["magnet_raw_vector"]['z']
+        d.magnetic_field_covariance = list((np.eye(3, dtype=np.float64) * 0.05).flatten())
+        return d
+
     def ros_get_imu(self):
         data = self.last_data
         d = self.topic_type["imu"]()
 
         # Header
         d.header.stamp = rospy.get_rostime()
-        d.header.frame_id = 'odom'
-
+        d.header.frame_id = 'base_link'
         # Orientation
         gyro_attitude = data["attitude"]
         d.orientation.x = gyro_attitude["x"]
@@ -428,15 +445,16 @@ if __name__ == '__main__':
     cfg.save_path = "data/phone_node"
 
     cfg.simulate = ""
-    cfg.simulate = "data/phone_node/phone_node_1536070874.9"
+    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
-        # "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
+        "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
 
-        # "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']]
+        "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']],
 
+        "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']]
         # "gps": ["/apollo/sensor/gnss/odometry", ["nav_msgs.msg", "Odometry"]],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
 
