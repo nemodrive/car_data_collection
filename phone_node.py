@@ -11,6 +11,7 @@ import utm
 from math import radians, cos, sin, asin, sqrt
 import numpy as np
 import importlib
+import std_msgs.msg, geometry_msgs.msg
 
 LOG = True
 
@@ -91,7 +92,7 @@ def run_server(i_ip_address, i_port, i_message_received, i_new_client, i_client_
 
 
 """
-    PhoneCollection app -> 
+    PhoneCollection app ->
 
     Location
         altitude	Geographical device location altitude.
@@ -101,20 +102,20 @@ def run_server(i_ip_address, i_port, i_message_received, i_new_client, i_client_
         timestamp	Timestamp (in seconds since 1970) when location was last time updated.
         verticalAccuracy	Vertical accuracy of the location.
 
-    Gyro: 
+    Gyro:
         attitude	Returns the attitude (ie, orientation in space) of the device.
         gravity	Returns the gravity acceleration vector expressed in the device's reference frame.
         rotationRate	Returns rotation rate as measured by the device's gyroscope.
         rotationRateUnbiased	Returns unbiased rotation rate as measured by the device's gyroscope.
         userAcceleration	Returns the acceleration that the user is giving to the device.
-        acceleration	Last measured linear acceleration of a device in three-dimensional space. 
+        acceleration	Last measured linear acceleration of a device in three-dimensional space.covariance
 
     compass:
         headingAccuracy	Accuracy of heading reading in degrees.
         magneticHeading	The heading in degrees relative to the magnetic North Pole. (Read Only)
         rawVector	The raw geomagnetic data measured in microteslas. (Read Only)
-        timestamp	Timestamp (in seconds since 1970) when the heading was last time updated. 
-        trueHeading	The heading in degrees relative to the geographic North Pole. 
+        timestamp	Timestamp (in seconds since 1970) when the heading was last time updated.
+        trueHeading	The heading in degrees relative to the geographic North Pole.
 
 """
 
@@ -127,8 +128,8 @@ class LocalizationProcessing:
         self.prev_location_update = dict({"timestamp": -1})
         self.speed_from_gps = [0., 0., 0.]
         self.topic_processing = dict({
-            "gps": self.get_gps,
-            "imu": self.get_imu
+            "gps": self.ros_get_gps,
+            "imu": self.ros_get_imu
         })
         self.topic_type = dict({})
 
@@ -217,6 +218,73 @@ class LocalizationProcessing:
         d.angular_velocity.z = gyro_rotation["z"]
         return d
 
+    def ros_get_gps(self):
+        data = self.last_data
+
+        d = self.topic_type["gps"]()
+
+        # Header
+        d.header.stamp = rospy.get_rostime()
+        d.header.frame_id = 'odom'
+
+        # Child frame id - dont know what this is
+        d.child_frame_id = 'base_link'
+
+        # Position
+        last_location = self.last_location_update
+        # d.loc = geometry_msgs.msg.PoseWithCovariance()
+        d.pose.pose.position.y = last_location["easting"]
+        d.pose.pose.position.x = last_location["northing"]
+        d.pose.pose.position.z = last_location["altitude"]
+        d.pose.covariance = list(np.zeros((36,), dtype=np.float64))
+
+        # Twist - linear velocity
+        speed = self.speed_from_gps
+        d.twist.twist.linear.x = speed[0]
+        d.twist.twist.linear.y = speed[1]
+        d.twist.twist.linear.z = speed[2]
+
+        # Twist - angular velocity
+        gyro_rotation = data["rotationRateUnbiased"]
+        d.twist.twist.angular.x = gyro_rotation["x"]
+        d.twist.twist.angular.y = gyro_rotation["y"]
+        d.twist.twist.angular.z = gyro_rotation["z"]
+        d.twist.covariance = list(np.zeros((36,), dtype=np.float64))
+
+        return d
+
+    def ros_get_imu(self):
+        data = self.last_data
+        d = self.topic_type["imu"]()
+
+        # Header
+        d.header.stamp = rospy.get_rostime()
+        d.header.frame_id = 'odom'
+
+        # Orientation
+        gyro_attitude = data["attitude"]
+        d.orientation.x = gyro_attitude["x"]
+        d.orientation.y = gyro_attitude["y"]
+        d.orientation.z = gyro_attitude["z"]
+        d.orientation.w = gyro_attitude["w"]
+        d.orientation_covariance = list(np.zeros((9,), dtype=np.float64))
+
+        # Angular velocity
+        gyro_rotation = data["rotationRateUnbiased"]
+        d.angular_velocity.x = gyro_rotation["x"]
+        d.angular_velocity.y = gyro_rotation["y"]
+        d.angular_velocity.z = gyro_rotation["z"]
+        d.angular_velocity_covariance = list(np.zeros((9,), dtype=np.float64))
+
+        # Linear acceleration
+        # TODO check if necessary with or without he gravity acc
+        accelerometer = data["userAcceleration"]
+        d.linear_acceleration.x = accelerometer["x"]
+        d.linear_acceleration.y = accelerometer["y"]
+        d.linear_acceleration.z = accelerometer["z"]
+        d.linear_acceleration_covariance = list(np.zeros((9,), dtype=np.float64))
+        return d
+
     def has_topic(self, topic):
         return topic in self.topic_processing.keys()
 
@@ -230,7 +298,7 @@ def publish_phone(cfg):
     simulate = cfg.simulate
 
     if simulate:
-        save_mode = False
+        save_mode = True
 
     if save_mode:
         import os
@@ -248,7 +316,10 @@ def publish_phone(cfg):
     publishers = dict()
     for topic, topic_data in topics.items():
         topic_path, topic_type = topic_data
+        print("topic_path: ", topic_path)
+        print("topic_type: ", topic_type)
         if localization.has_topic(topic):
+            print("topic: ", topic)
             topic_class = get_class(*topic_type)
             localization.register_topic_type(topic, topic_class)
             publishers[topic] = rospy.Publisher(topic_path, topic_class, queue_size=queue_size)
@@ -264,23 +335,33 @@ def publish_phone(cfg):
     def message_received(client, server, message):
         """Called when a client sends a message"""
         plog("Client(%d) said: %s" % (client['id'], message))
-
+        # plog(message[21:-2])
         # message
-        try:
-            msg_data = json.loads(message)
-
+        # msg_data = json.loads(message[21:-2].replace('\"\"', '\"'))
+        # try:
+            # print(publishers.items())
+            # for (topic, publisher) in publishers.items():
+            #     # print(topic)
+            #     topic_data = localization.get_topic(topic)
+            #     print (topic_data)
             # Ingest data point
-            localization.ingest(msg_data)
-            for topic, publisher in publishers.items():
-                topic_data = localization.get_topic(topic)
-                publisher.publish(topic_data)
-                plog("Published: {}".format(topic))
-            if save_mode:
-                out_file.write(message)
-                out_file.write("\n")
+        msg_data = json.loads(message)
+        localization.ingest(msg_data)
+        for (topic, publisher) in publishers.items():
+            plog('cee??\n')
+            print(topic)
+            topic_data = localization.get_topic(topic)
+            print(topic_data)
+            publisher.publish(topic_data)
+            # print(msg_data)
+            plog("Published: {}".format(topic))
+        if save_mode:
+            out_file.write(message)
+            out_file.write("\n")
 
-        except Exception:
-            pass
+        # except Exception:
+        #     # print('fuck')
+        #     pass
 
     # Start server:
     # run_server(ip, port, message_received, new_client, client_diconnected)
@@ -309,11 +390,13 @@ if __name__ == '__main__':
     cfg.queue_size = 1
     cfg.save_mode = False
     cfg.save_path = "data/phone_node"
-    cfg.simulate = "data/phone_node/phone_node_1536070874.9"
+    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
+        "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
+        "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']]
     })
 
     try:
