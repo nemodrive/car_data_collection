@@ -157,6 +157,8 @@ class LocalizationProcessing:
     def __init__(self):
         self.last_data = None
         self.prev_data = None
+        self.origin_position = {'x': 0.0, 'y': 0.0}
+        self.start = False
         self.last_location_update = dict({"timestamp": -1})
         self.prev_location_update = dict({"timestamp": -1})
         self.speed_from_gps = [0., 0., 0.]
@@ -168,6 +170,7 @@ class LocalizationProcessing:
         self.topic_type = dict({})
 
     def ingest(self, data):
+
         self.prev_data = self.last_data
         self.last_data = data
         if data["loc_tp"] > self.last_location_update["timestamp"]:
@@ -176,6 +179,11 @@ class LocalizationProcessing:
             # WGS84 conversion from lat_lon GPS
             easting, northing, zone_no, zone_letter = utm.from_latlon(
                 data["location"]["x"],  data["location"]["y"])
+
+            if not self.start:
+                self.origin_position['x'] = easting
+                self.origin_position['y'] = northing
+                self.start = True
 
             self.last_location_update = dict({
                 "timestamp": data["loc_tp"],
@@ -186,7 +194,9 @@ class LocalizationProcessing:
                 "northing": northing,
                 "zone_no": zone_no,
                 "zone_letter": zone_letter,
-                "magnet_raw_vector": data["rawVector"]
+                "magnet_raw_vector": data["rawVector"],
+                "quaternion": data["attitude"],
+                "twist": data["rotationRateUnbiased"]
             })
 
             last_location = self.last_location_update
@@ -231,6 +241,39 @@ class LocalizationProcessing:
         d.localization.linear_velocity.z = speed[2]
         return d
 
+    def get_odom_from_gps(self):
+        d = self.topic_type["odom"]()
+        d.header.timestamp_sec = rospy.get_time()
+
+        d.header.timestamp_sec = rospy.get_time()
+
+        # Position
+        last_location = self.last_location_update
+        d.pose.pose.position.x = last_location["easting"] - self.origin_position['x']
+        d.pose.pose.position.y = last_location["northing"] - self.origin_position['y']
+        d.pose.pose.position.z = last_location["altitude"]
+
+        # Orientation
+        gyro_attitude = last_location["attitude"]
+        d.pose.pose.orientation.qx = gyro_attitude["x"]
+        d.pose.pose.orientation.qy = gyro_attitude["y"]
+        d.pose.pose.orientation.qz = gyro_attitude["z"]
+        d.pose.pose.orientation.qw = gyro_attitude["w"]
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+
+        speed = self.speed_from_gps
+        d.twist.twist.linear_velocity.x = speed[0]
+        d.twist.twist.linear_velocity.y = speed[1]
+        d.twist.twist.linear_velocity.z = speed[2]
+
+        gyro_rotation = last_location["rotationRateUnbiased"]
+        d.twist.twist.angular.x = gyro_rotation["x"]
+        d.twist.twist.angular.y = gyro_rotation["y"]
+        d.twist.twist.angular.z = gyro_rotation["z"]
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+
+        return d
+
     def get_imu(self):
         data = self.last_data
         d = self.topic_type["imu"]()
@@ -271,23 +314,23 @@ class LocalizationProcessing:
         # Position
         last_location = self.last_location_update
         # d.loc = geometry_msgs.msg.PoseWithCovariance()
-        d.pose.pose.position.y = last_location["easting"]
-        d.pose.pose.position.x = last_location["northing"]
+        d.pose.pose.position.y = last_location["longitude"]
+        d.pose.pose.position.x = last_location["latitude"]
         d.pose.pose.position.z = last_location["altitude"]
-        d.pose.covariance = list(np.zeros((36,), dtype=np.float64))
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
 
         # Twist - linear velocity
-        speed = self.speed_from_gps
-        d.twist.twist.linear.x = speed[0]
-        d.twist.twist.linear.y = speed[1]
-        d.twist.twist.linear.z = speed[2]
+        # speed = self.speed_from_gps
+        d.twist.twist.linear.x = 0.0
+        d.twist.twist.linear.y = 0.0
+        d.twist.twist.linear.z = 0.0
 
         # Twist - angular velocity
-        gyro_rotation = data["rotationRateUnbiased"]
-        d.twist.twist.angular.x = gyro_rotation["x"]
-        d.twist.twist.angular.y = gyro_rotation["y"]
-        d.twist.twist.angular.z = gyro_rotation["z"]
-        d.twist.covariance = list(np.zeros((36,), dtype=np.float64))
+        # gyro_rotation = data["rotationRateUnbiased"]
+        d.twist.twist.angular.x = 0.0
+        d.twist.twist.angular.y = 0.0
+        d.twist.twist.angular.z = 0.0
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
 
         return d
 
@@ -320,14 +363,14 @@ class LocalizationProcessing:
         d.orientation.y = gyro_attitude["y"]
         d.orientation.z = gyro_attitude["z"]
         d.orientation.w = gyro_attitude["w"]
-        d.orientation_covariance = list(np.zeros((9,), dtype=np.float64))
+        d.orientation_covariance = list((np.eye(3, dtype=np.float64) * 0.05).flatten())
 
         # Angular velocity
         gyro_rotation = data["rotationRateUnbiased"]
         d.angular_velocity.x = gyro_rotation["x"]
         d.angular_velocity.y = gyro_rotation["y"]
         d.angular_velocity.z = gyro_rotation["z"]
-        d.angular_velocity_covariance = list(np.zeros((9,), dtype=np.float64))
+        d.angular_velocity_covariance = list((np.eye(3, dtype=np.float64) * 0.05).flatten())
 
         # Linear acceleration
         # TODO check if necessary with or without he gravity acc
@@ -335,7 +378,7 @@ class LocalizationProcessing:
         d.linear_acceleration.x = accelerometer["x"]
         d.linear_acceleration.y = accelerometer["y"]
         d.linear_acceleration.z = accelerometer["z"]
-        d.linear_acceleration_covariance = list(np.zeros((9,), dtype=np.float64))
+        d.linear_acceleration_covariance = list((np.eye(3, dtype=np.float64) * 0.05).flatten())
         return d
 
     def has_topic(self, topic):
@@ -449,12 +492,14 @@ if __name__ == '__main__':
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
-        "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
+        # "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
 
         "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']],
 
-        "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']]
+        # "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
+
+        "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']]
         # "gps": ["/apollo/sensor/gnss/odometry", ["nav_msgs.msg", "Odometry"]],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
 
