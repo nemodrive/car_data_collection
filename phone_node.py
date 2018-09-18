@@ -418,21 +418,22 @@ def publish_phone(cfg):
 
     # Start server:
     # run_server(ip, port, message_received, new_client, client_diconnected)
-    if not simulate:
-        server = WebsocketServer(port, host=ip)
-        server.set_fn_new_client(new_client)
-        server.set_fn_client_left(client_diconnected)
-        server.set_fn_message_received(message_received)
-        rospy.spin()
+    # if not simulate:
+    #     server = WebsocketServer(port, host=ip)
+    #     server.set_fn_new_client(new_client)
+    #     server.set_fn_client_left(client_diconnected)
+    #     server.set_fn_message_received(message_received)
+    #     rospy.spin()
+    #
+    #     server.run_forever()
+    # else:
 
-        server.run_forever()
-    else:
-        client = dict({"id": -1})
+    client = dict({"id": -1})
 
-        with open(simulate) as f:
-            data_msgs = f.readlines()
-            for msg in data_msgs:
-                message_received(client, None, msg)
+    with open(simulate) as f:
+        data_msgs = f.readlines()
+        for msg in data_msgs:
+            message_received(client, None, msg)
 
 
 if __name__ == '__main__':
@@ -445,7 +446,8 @@ if __name__ == '__main__':
     cfg.save_path = "data/phone_node"
 
     cfg.simulate = ""
-    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
+    # cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
+    cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
