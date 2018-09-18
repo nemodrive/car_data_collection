@@ -157,7 +157,7 @@ class LocalizationProcessing:
     def __init__(self):
         self.last_data = None
         self.prev_data = None
-        self.origin_position = {'x': 0.0, 'y': 0.0}
+        self.origin_position = {'x': 0.0, 'y': 0.0, 'z': 0.0}
         self.start = False
         self.last_location_update = dict({"timestamp": -1})
         self.prev_location_update = dict({"timestamp": -1})
@@ -165,7 +165,8 @@ class LocalizationProcessing:
         self.topic_processing = dict({
             "gps": self.ros_get_gps,
             "imu": self.ros_get_imu,
-            "magnet": self.get_magnetometer
+            "magnet": self.get_magnetometer,
+            "odom": self.get_odom_from_gps
         })
         self.topic_type = dict({})
 
@@ -183,6 +184,7 @@ class LocalizationProcessing:
             if not self.start:
                 self.origin_position['x'] = easting
                 self.origin_position['y'] = northing
+                self.origin_position['z'] = data["location"]["z"]
                 self.start = True
 
             self.last_location_update = dict({
@@ -243,33 +245,39 @@ class LocalizationProcessing:
 
     def get_odom_from_gps(self):
         d = self.topic_type["odom"]()
-        d.header.timestamp_sec = rospy.get_time()
-
-        d.header.timestamp_sec = rospy.get_time()
+        d.header.stamp = rospy.get_rostime()
+        d.header.frame_id = "odom"
+        d.child_frame_id = "base_link"
 
         # Position
         last_location = self.last_location_update
         d.pose.pose.position.x = last_location["easting"] - self.origin_position['x']
         d.pose.pose.position.y = last_location["northing"] - self.origin_position['y']
-        d.pose.pose.position.z = last_location["altitude"]
+        d.pose.pose.position.z = last_location["altitude"] - self.origin_position['z']
 
         # Orientation
-        gyro_attitude = last_location["attitude"]
-        d.pose.pose.orientation.qx = gyro_attitude["x"]
-        d.pose.pose.orientation.qy = gyro_attitude["y"]
-        d.pose.pose.orientation.qz = gyro_attitude["z"]
-        d.pose.pose.orientation.qw = gyro_attitude["w"]
+        gyro_attitude = last_location["quaternion"]
+        d.pose.pose.orientation.x = gyro_attitude["x"]
+        d.pose.pose.orientation.y = gyro_attitude["y"]
+        d.pose.pose.orientation.z = gyro_attitude["z"]
+        d.pose.pose.orientation.w = gyro_attitude["w"]
         d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
 
-        speed = self.speed_from_gps
-        d.twist.twist.linear_velocity.x = speed[0]
-        d.twist.twist.linear_velocity.y = speed[1]
-        d.twist.twist.linear_velocity.z = speed[2]
+        # speed = self.speed_from_gps
+        # d.twist.twist.linear_velocity.x = speed[0]
+        # d.twist.twist.linear_velocity.y = speed[1]
+        # d.twist.twist.linear_velocity.z = speed[2]
+        d.twist.twist.linear.x = 0
+        d.twist.twist.linear.y = 0
+        d.twist.twist.linear.z = 0
 
-        gyro_rotation = last_location["rotationRateUnbiased"]
-        d.twist.twist.angular.x = gyro_rotation["x"]
-        d.twist.twist.angular.y = gyro_rotation["y"]
-        d.twist.twist.angular.z = gyro_rotation["z"]
+        # gyro_rotation = last_location["rotationRateUnbiased"]
+        # d.twist.twist.angular.x = gyro_rotation["x"]
+        # d.twist.twist.angular.y = gyro_rotation["y"]
+        # d.twist.twist.angular.z = gyro_rotation["z"]
+        d.twist.twist.angular.x = 0
+        d.twist.twist.angular.y = 0
+        d.twist.twist.angular.z = 0
         d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
 
         return d
@@ -499,7 +507,7 @@ if __name__ == '__main__':
 
         "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']],
 
-        # "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
+        "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
 
         "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']]
         # "gps": ["/apollo/sensor/gnss/odometry", ["nav_msgs.msg", "Odometry"]],
