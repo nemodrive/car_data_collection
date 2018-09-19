@@ -4,13 +4,14 @@
     <node name="imu_filter" pkg="imu_filter_madgwick" type="imu_filter_node" clear_params="true">
         <param name="world_frame" value="enu"/>
         <param name="use_magnetic_field_msg" value="true"/>
+        <param name="publish_tf" value="false"/>
 
         <remap from="imu/data_raw" to="test/imu"/>
         <remap from="imu/mag" to="test/magnet"/>
     </node>
 
     <node name='robot_pose_ekf' pkg='robot_pose_ekf' type='robot_pose_ekf' clear_params='true'>
-      <param name="output_frame" value="odom_combined"/>
+      <param name="output_frame" value="odom"/>
       <param name="base_footprint_frame" value="base_link"/>
       <param name="freq" value="60.0"/>
       <param name="sensor_timeout" value="1.0"/>
@@ -21,4 +22,32 @@
       <remap from="imu_data" to="imu/data" />
       <remap from="odom" to="test/odom_from_gps" />
     </node>
+
+    <node pkg="robot_localization" type="navsat_transform_node" name="navsat_transfrom" respawn="true">
+      
+      <param name="frequency" value="60"/>
+      <param name="delay" value="1"/>
+      <param name="magnetic_declination_radians" value="0"/>
+      
+      <param name="yaw_offset" value="0"/>
+      <param name="zero_altitude" value="true"/>
+      <param name="broadcast_utm_transform" value="false"/>
+      <param name="publish_filtered_gps" value="true"/>
+      
+      <param name="use_odometry_yaw" value="false"/>
+      <param name="wait_for_datum" value="true"/>
+
+      <rosparam param="datum">[44.435242, 26.0479968, 0.0, map, base_link]</rosparam>
+
+
+      <param name="map_frame" value="map"/>
+      <param name="odom_frame" value="odom"/>
+      <param name="base_link_frame" value="base_link"/>
+      <param name="world_frame" value="map"/>
+
+
+      <remap from="odometry/filtered" to="robot_pose_ekf/odom_combined"/>
+      <!-- <remap from="imu/data" to="test/imu"/> -->
+
+   </node>
 </launch>
