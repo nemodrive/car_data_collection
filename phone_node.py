@@ -166,7 +166,8 @@ class LocalizationProcessing:
             "gps": self.ros_get_gps,
             "imu": self.ros_get_imu,
             "magnet": self.get_magnetometer,
-            "odom": self.get_odom_from_gps
+            "odom": self.get_odom_from_gps,
+            #"navsat_gps": self.get_navsat_gps
         })
         self.topic_type = dict({})
 
@@ -342,6 +343,28 @@ class LocalizationProcessing:
 
         return d
 
+
+    def get_navsat_gps(self):
+        data = self.last_data
+
+        d = self.topic_type["gps"]()
+
+        # Header
+        d.header.stamp = rospy.get_rostime()
+        d.header.frame_id = 'base_link'
+        d.status.status = 0     # int8 STATUS_FIX = 0 # unaugmented fix - see sensor_msgs/NavSatStatus.msg
+        d.status.service = 1    # uint16 SERVICE_GPS = 1
+
+        last_location = self.last_location_update
+        d.latitude = last_location["latitude"]
+        d.longitude = last_location["longitude"]
+        d.altitude = last_location["altitude"]
+
+        d.position_covariance = list((np.zeros(9, dtype=np.float64)).flatten())
+        d.position_covariance_type = 0      # uint8 COVARIANCE_TYPE_UNKNOWN = 0
+
+        return d
+
     def get_magnetometer(self):
         d = self.topic_type["magnet"]()
 
@@ -502,17 +525,14 @@ if __name__ == '__main__':
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
-        # "gps": ["/test/odom", ['nav_msgs.msg', 'Odometry']],
         # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
 
         "imu": ["/test/imu", ['sensor_msgs.msg', 'Imu']],
 
         "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
 
-        "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']]
-        # "gps": ["/apollo/sensor/gnss/odometry", ["nav_msgs.msg", "Odometry"]],
-        # "imu": ["/apollo/sensor/gnss/imu", ["modules.drivers.gnss.proto.imu_pb2", "Imu"]]
-
+        "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']],
+        "gps": ["/test/gps", ['sensor_msgs.msg', 'NavSatFix']],
     })
 
     try:
