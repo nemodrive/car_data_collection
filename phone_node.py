@@ -183,8 +183,8 @@ class LocalizationProcessing:
                 data["location"]["x"],  data["location"]["y"])
 
             if not self.start:
-                self.origin_position['x'] = easting
-                self.origin_position['y'] = northing
+                self.origin_position['x'] = northing
+                self.origin_position['y'] = easting
                 self.origin_position['z'] = data["location"]["z"]
                 self.start = True
 
@@ -252,8 +252,8 @@ class LocalizationProcessing:
 
         # Position
         last_location = self.last_location_update
-        d.pose.pose.position.x = last_location["easting"] - self.origin_position['x']
-        d.pose.pose.position.y = last_location["northing"] - self.origin_position['y']
+        d.pose.pose.position.x = last_location["northing"] - self.origin_position['x']
+        d.pose.pose.position.y = last_location["easting"] - self.origin_position['y']
         d.pose.pose.position.z = last_location["altitude"] - self.origin_position['z']
 
         # Orientation

@@ -44,7 +44,7 @@
                                           true, true, true,
                                           false, false, false,
                                           false, false, false,
-                                          true, true, true]</rosparam>
+                                          false, false, false]</rosparam>
       
       <rosparam param="imu0_config"> [false, false, false,
                                           false, false, false,
@@ -55,8 +55,8 @@
       <param name="odom0_differential" value="false"/>  
       <param name="imu0_differential" value="false"/>
 
-      <param name="odom0_relative" value="true"/>
-      <param name="imu0_relative" value="true"/>
+      <param name="odom0_relative" value="false"/>
+      <param name="imu0_relative" value="false"/>
       <param name="imu0_remove_gravitational_acceleration" value="true"/>   
       
       <param name="print_diagnostics" value="true"/>
@@ -116,7 +116,7 @@
       <param name="use_odometry_yaw" value="false"/>
       <param name="wait_for_datum" value="true"/>
 
-      <rosparam param="datum">[44.435242, 26.0479968, 0.0, map, base_link]</rosparam>
+      <rosparam param="datum">[44.4346809387207, 26.048294067382812, 0.0, map, base_link]</rosparam>
 
 
       <param name="map_frame" value="map"/>
@@ -126,6 +126,6 @@
 
 
       <!-- <remap from="odometry/filtered" to="robot_pose_ekf/odom_combined"/> -->
-      
+
     </node>
 </launch>
