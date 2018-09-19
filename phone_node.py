@@ -167,7 +167,7 @@ class LocalizationProcessing:
             "imu": self.ros_get_imu,
             "magnet": self.get_magnetometer,
             "odom": self.get_odom_from_gps,
-            #"navsat_gps": self.get_navsat_gps
+            "navsat_gps": self.get_navsat_gps
         })
         self.topic_type = dict({})
 
@@ -347,7 +347,7 @@ class LocalizationProcessing:
     def get_navsat_gps(self):
         data = self.last_data
 
-        d = self.topic_type["gps"]()
+        d = self.topic_type["navsat_gps"]()
 
         # Header
         d.header.stamp = rospy.get_rostime()
@@ -532,7 +532,7 @@ if __name__ == '__main__':
         "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
 
         "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']],
-        "gps": ["/test/gps", ['sensor_msgs.msg', 'NavSatFix']],
+        "navsat_gps": ["/test/gps", ['sensor_msgs.msg', 'NavSatFix']],
     })
 
     try:
