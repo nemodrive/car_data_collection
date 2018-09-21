@@ -163,11 +163,11 @@ class LocalizationProcessing:
         self.prev_location_update = dict({"timestamp": -1})
         self.speed_from_gps = [0., 0., 0.]
         self.topic_processing = dict({
-            "gps": self.ros_get_gps,
+            # "gps": self.ros_get_gps,
             "imu": self.ros_get_imu,
             "magnet": self.get_magnetometer,
             "odom": self.get_odom_from_gps,
-            #"navsat_gps": self.get_navsat_gps
+            "navsat_gps": self.get_navsat_gps
         })
         self.topic_type = dict({})
 
@@ -183,8 +183,8 @@ class LocalizationProcessing:
                 data["location"]["x"],  data["location"]["y"])
 
             if not self.start:
-                self.origin_position['x'] = easting
-                self.origin_position['y'] = northing
+                self.origin_position['x'] = northing
+                self.origin_position['y'] = easting
                 self.origin_position['z'] = data["location"]["z"]
                 self.start = True
 
@@ -252,8 +252,8 @@ class LocalizationProcessing:
 
         # Position
         last_location = self.last_location_update
-        d.pose.pose.position.x = last_location["easting"] - self.origin_position['x']
-        d.pose.pose.position.y = last_location["northing"] - self.origin_position['y']
+        d.pose.pose.position.x = last_location["northing"] - self.origin_position['x']
+        d.pose.pose.position.y = last_location["easting"] - self.origin_position['y']
         d.pose.pose.position.z = last_location["altitude"] - self.origin_position['z']
 
         # Orientation
@@ -262,7 +262,7 @@ class LocalizationProcessing:
         d.pose.pose.orientation.y = gyro_attitude["y"]
         d.pose.pose.orientation.z = gyro_attitude["z"]
         d.pose.pose.orientation.w = gyro_attitude["w"]
-        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
 
         # speed = self.speed_from_gps
         # d.twist.twist.linear_velocity.x = speed[0]
@@ -279,7 +279,7 @@ class LocalizationProcessing:
         d.twist.twist.angular.x = 0
         d.twist.twist.angular.y = 0
         d.twist.twist.angular.z = 0
-        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
 
         return d
 
@@ -326,7 +326,7 @@ class LocalizationProcessing:
         d.pose.pose.position.y = last_location["longitude"]
         d.pose.pose.position.x = last_location["latitude"]
         d.pose.pose.position.z = last_location["altitude"]
-        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
 
         # Twist - linear velocity
         # speed = self.speed_from_gps
@@ -339,7 +339,7 @@ class LocalizationProcessing:
         d.twist.twist.angular.x = 0.0
         d.twist.twist.angular.y = 0.0
         d.twist.twist.angular.z = 0.0
-        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.05).flatten())
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
 
         return d
 
@@ -347,7 +347,7 @@ class LocalizationProcessing:
     def get_navsat_gps(self):
         data = self.last_data
 
-        d = self.topic_type["gps"]()
+        d = self.topic_type["navsat_gps"]()
 
         # Header
         d.header.stamp = rospy.get_rostime()
@@ -360,7 +360,7 @@ class LocalizationProcessing:
         d.longitude = last_location["longitude"]
         d.altitude = last_location["altitude"]
 
-        d.position_covariance = list((np.zeros(9, dtype=np.float64)).flatten())
+        d.position_covariance = list((np.eye(3, dtype=np.float64) * 0.001).flatten())
         d.position_covariance_type = 0      # uint8 COVARIANCE_TYPE_UNKNOWN = 0
 
         return d
@@ -520,8 +520,8 @@ if __name__ == '__main__':
     cfg.save_path = "data/phone_node"
 
     cfg.simulate = ""
-    # cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
-    cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9"
+    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
+    # cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
@@ -532,7 +532,7 @@ if __name__ == '__main__':
         "magnet": ["/test/magnet", ['sensor_msgs.msg', 'MagneticField']],
 
         "odom": ["test/odom_from_gps", ['nav_msgs.msg', 'Odometry']],
-        "gps": ["/test/gps", ['sensor_msgs.msg', 'NavSatFix']],
+        "navsat_gps": ["/test/gps", ['sensor_msgs.msg', 'NavSatFix']],
     })
 
     try:
