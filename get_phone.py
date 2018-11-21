@@ -119,45 +119,7 @@ def get_phone(cfg):
 
 
 
-"""
-"""
-df = pd.read_csv("/media/andrei/CE04D7C504D7AF291/nemodrive/data_collect/data/1533228223_log"
-                 "/old_phone.log", sep=";", header=None)
 
-# Transform old df
-x = df[1]
-df[1] = x.apply(lambda x: int(x[:1]))
-df[2] = x.apply(lambda x: x[2:])
-df.to_csv("/media/andrei/CE04D7C504D7AF291/nemodrive/data_collect/data/1533228223_log/phone.log",
-          sep=";", float_format='%.6f', index=False, header=False)
-
-
-import json
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
-
-def phone_data_to_df(df):
-    data = []
-    for idx in df.index:
-        d = json.loads(df.loc[idx])
-        d["idx"] = idx
-        data.append(d)
-    return pd.DataFrame.from_dict(data)
-
-file_path = "/media/andrei/CE04D7C504D7AF291/nemodrive/data_collect/data/1533228223_log/phone.log"
-df = pd.read_csv(file_path, sep=";", header=None)
-
-df_phone = phone_data_to_df(df[2])
-
-df["idx"] = df.index
-df = pd.merge(df, df_phone, on="idx")
-
-gps = pd.DataFrame.from_dict(list(df["gps"].values))
-
-plt.scatter(gps["y"], gps["x"], s=0.05);
-plt.show()
 
 
 

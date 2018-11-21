@@ -14,3 +14,9 @@ blacklist nouveau
 options nouveau modeset=0
 sudo update-initramfs -u # Regenerate the kernel initramfs
 
+
+================================================================================
+
+sudo apt-get install sshuttle
+
+================================================================================
