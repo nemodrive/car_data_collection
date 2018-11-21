@@ -9,8 +9,8 @@ import numpy as np
 
 CAR_L = 2.634  # Wheel base
 CAR_T = 1.733  # Tread
-MAX_STEER = 500
 MIN_TURNING_RADIUS = 5.
+MAX_STEER = 500
 
 
 def get_radius(angle, car_l=CAR_L, car_t=CAR_T):
@@ -76,6 +76,28 @@ def point_on_circle(r, distance=1., no_points=100, center_x=True):
     return points
 
 
+class TurnRadius:
+    def __init__(self, cfg):
+        self.car_l = cfg.car_l
+        self.car_t = cfg.car_t
+        self.min_turning_radius = cfg.min_turning_radius
+
+        self.num_points = num_points = 400
+        max_wheel_angle = get_radius(MIN_TURNING_RADIUS)
+        self.angles = np.linspace(-max_wheel_angle, max_wheel_angle, num_points)
+
+    def get_car_path(self, steer_factor, distance=20):
+        """
+        :param steer_factor: [-1, 1] (max left max right)
+        :return:
+        """
+        num_points = self.num_points
+        idx = np.clip(int(num_points/2. * steer_factor + num_points/2.), 0, num_points-1)
+        r = get_radius(self.angles[idx])
+        c, lw, rw = get_car_path(r, distance=distance)
+        return c, lw, rw
+
+
 if __name__ == "__main__":
     # You probably won't need this if you're embedding things in a tkinter plot...
     plt.ion()
@@ -106,6 +128,7 @@ if __name__ == "__main__":
 
         r = get_radius(angles[idx])
         c, lw, rw = get_car_path(r, distance=20)
+        print(c)
 
         plt.plot(c[:, 0], c[:, 1])
         plt.plot(lw[:, 0], lw[:, 1])
@@ -114,7 +137,7 @@ if __name__ == "__main__":
         plt.axis('equal')
         plt.show(block=False)
 
-        q = input("key:\n")
+        q = raw_input("key:\n")
         if q == "q":
             idx -= 1
         elif q == "w":

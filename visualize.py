@@ -108,5 +108,8 @@ if __name__ == "__main__":
         if collect.obd:
             obd_data = obd_loader.get_closest(crt_tp)
 
+        if collect.obd:
+            obd_data = obd_loader.get_closest(crt_tp)
+
         # plt.show()
         # plt.pause(0.0001)  # Note this correction

@@ -2,12 +2,12 @@ server_ip: "141.85.232.73"
 server_port: 9090
 queue_size: 10
 # topics must contain information:
-# [topic_name, topic_type, optional: end_topic_name]
+# [topic_name, topic_type, optional: end_topic_name, queue_length, throttle_rate]
 # if end_topic_name is not set same name will be used
 
 remote_topics: [
   ["/camera_short/image_raw", ["sensor_msgs.msg", "Image"], "/camera_short/image_raw"],
-  ["/player_vehicle", ["std_msgs.msg", "String"], "/player_vehicle"]
+  ["/player_vehicle", ["std_msgs.msg", "String"], "/player_vehicle", 0, 10]
 ]
 
 local_topics: [
