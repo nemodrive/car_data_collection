@@ -103,6 +103,8 @@ if __name__ == "__main__":
             if show_cross:
                 view_frame[h//2-cross_size: h//2+cross_size, :] = CROSS_COLOR
                 view_frame[:, w//2-cross_size: w//2+cross_size] = CROSS_COLOR
+                # view_frame[:, (w//4)*1-cross_size: (w//4)*1+cross_size] = CROSS_COLOR
+                # view_frame[:, (w//4)*3-cross_size: (w//4)*3+cross_size] = CROSS_COLOR
 
             if save_screen_shot:
                 view_frame[:, :, 2] += 100

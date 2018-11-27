@@ -184,6 +184,7 @@ if __name__ == "__main__":
         new_cfg = get_default_cfg()
         all_que.append(mp.Queue(maxsize=100))
         new_cfg.queue = all_que[-1]
+        new_cfg.can = cfg.can
 
         all_proc.append(mp.Process(target=get_can, args=(new_cfg,)))
         all_proc[-1].start()
