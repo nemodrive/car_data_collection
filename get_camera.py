@@ -1,6 +1,8 @@
 """
 Usefull links: http://bengreen.eu/fancyhtml/quickreference/ffmpegv4l2.html
 
+sudo udevadm info --query=all /dev/video1  # List camera info
+
 v4l2-ctl --list-devices
 
 v4l2-ctl --device /dev/video0 --all
@@ -12,6 +14,8 @@ v4l2-ctl -d /dev/video1 -c <option>=<value>
 ffmpeg -i video.mkv -c copy video_fixed.mkv
 ffprobe -v error -show_entries frame=pkt_pts_time -of default=noprint_wrappers=1:nokey=1 camera_0.mkv > camer_0_pts.log
 
+ffmpeg -i camera_1.mkv -s 1920x1080  -vcodec h264 -acodec mp2 small_1.mp4
+ffmpeg -i camera_1.mkv  -ss 00:00:00.000 -t 00:24:00.000 -vcodec h264 -acodec mp2 small_1.mp4
 
 v4l2-ctl -d /dev/video1 -c focus_auto=0
 v4l2-ctl -d /dev/video1 -c focus_absolute=0
@@ -44,6 +48,7 @@ from utils import get_nonblocking
 #                  "-input_format mjpeg -i " \
 #                  "/dev/video{} -c copy {}.mkv"
 # ffmpeg -f v4l2 -video_size 1920x1080 -i /dev/video0 -c copy test.mkv
+# ffmpeg -i camera_3.mkv  -ss 00:00:00.803683 -t 00:05:00.000 -vcodec h264 -acodec mp2 small_3.mp4
 
 FFMPEG_COMMAND = "ffmpeg -s {}x{} -framerate 30 -rtbufsize 100MB -f v4l2 -vcodec mjpeg -i " \
                  "/dev/video{} -copyinkf -vcodec copy {}.mkv"
