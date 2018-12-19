@@ -520,8 +520,8 @@ if __name__ == '__main__':
     cfg.save_path = "data/phone_node"
 
     cfg.simulate = ""
-    cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
-    # cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9"
+    #cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
+    cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9_withEular"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],

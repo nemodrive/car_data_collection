@@ -10,6 +10,8 @@
         <remap from="imu/mag" to="test/magnet"/>
     </node>
 
+    <!-- https://github.com/methylDragon/ros-sensor-fusion-tutorial/blob/master/01%20-%20ROS%20and%20Sensor%20Fusion%20Tutorial.md -->
+
     <!-- <node name='robot_pose_ekf' pkg='robot_pose_ekf' type='robot_pose_ekf' clear_params='true'>
       <param name="output_frame" value="odom"/>
       <param name="base_footprint_frame" value="base_link"/>

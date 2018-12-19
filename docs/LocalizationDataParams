@@ -1,0 +1,27 @@
+1. location accuracy: loc_accuracy - depends on how start() was setup, maybe very inaccurate due to wifi (a.k.a uses wifi carier to estimate accuracy).
+
+Gyro
+2. Quaternion attitude - orientation angles in quaternion form, no information of the order in vector components, need trasform in euler angles to use in ROS
+Quaternion q = Quaternion.identity;
+Vector3 v = q.ToEulerAngles();
+
+3. Gravity - horizontal = x, vertical = y
+
+
+4. rotationRate - angular rates around x, y, z a.k.a roll, pitch, yaw 
+
+5. rotationRateUnbiase - same as rotationRate, but uncompesated raw informarmation form sensor
+
+6. updateInterval - gyro update frequency
+
+7. userAcceleration - (x,y,z) accelerations with the gravitational acceleration g removed 
+
+Magnetometer (Compass sensor)
+8.  headingAccuracy - may not be avialable, don't know how it's computed
+
+9.  magneticHeading - orientation relative to north pole referenced to the top of the phone screen
+
+10. rawVector - the magnetic field components referenced to the norh pole 
+(May be useful if converted to heading: https://blog.digilentinc.com/how-to-convert-magnetometer-data-into-compass-heading/ or http://mythopoeic.org/magnetometer/)
+
+
