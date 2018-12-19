@@ -93,7 +93,7 @@ if __name__ == "__main__":
         help='Default configuration file'
     )
     arg_parser.add_argument(
-        '--out-dir', default='/home/andrei/STYU', type=str, dest="out_dir"
+        '--out-dir', default='data', type=str, dest="out_dir"
     )
     arg_parser.add_argument(
         '--log-name', default='log', type=str, dest="log_name"
@@ -172,6 +172,7 @@ if __name__ == "__main__":
         for i in range(len(cameras_ind_cfg)):
             play_procs.append(mp.Process(target=get_camera, args=(cameras_ind_cfg[i],)))
             play_procs[i].start()
+            time.sleep(0.5)
 
         all_proc += play_procs
         all_que += camera_out_que
@@ -183,6 +184,7 @@ if __name__ == "__main__":
         new_cfg = get_default_cfg()
         all_que.append(mp.Queue(maxsize=100))
         new_cfg.queue = all_que[-1]
+        new_cfg.can = cfg.can
 
         all_proc.append(mp.Process(target=get_can, args=(new_cfg,)))
         all_proc[-1].start()

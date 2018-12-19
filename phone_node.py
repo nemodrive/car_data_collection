@@ -343,7 +343,6 @@ class LocalizationProcessing:
 
         return d
 
-
     def get_navsat_gps(self):
         data = self.last_data
 
@@ -537,7 +536,7 @@ if __name__ == '__main__':
 
     try:
         publish_phone(cfg)
-    except KeyboardInterrupt:
+    except rospy.ROSInterruptException:
         pass
 
 

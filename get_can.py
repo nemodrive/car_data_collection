@@ -6,7 +6,7 @@ import signal
 
 from utils import get_nonblocking
 
-CANDUMP_CMD = "candump -L can0 > {}"
+CANDUMP_CMD = "candump -L {} > {}"
 
 
 def plog(s):
@@ -17,12 +17,14 @@ def get_can(cfg):
     out_dir = cfg.out_dir
     queue = cfg.queue
     receive_queue = cfg.receive_queue
+    can_cfg = cfg.can
+    device = can_cfg.device
 
     log_path = "{}/can_raw.log".format(out_dir)
     out_file = open(log_path, "w")
     out_file.close()
 
-    cmd = CANDUMP_CMD.format(log_path)
+    cmd = CANDUMP_CMD.format(log_path, device)
 
     # Wait for start command:
     plog("Ready")
