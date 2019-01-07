@@ -184,7 +184,7 @@ def get_gps(df):
     gps = gps.assign(**{'easting': -1., 'northing': -1., "zone_no": -1., "zone_letter": ""})
 
     for idx, row in gps.iterrows():
-        easting, northing, zone_no, zone_letter = utm.from_latlon(row["x"], row["y"])
+        easting, northing, zone_no, zone_letter = utm.from_latlon(row["y"], row["x"])
         gps.set_value(idx, "easting", easting)
         gps.set_value(idx, "northing", northing)
         gps.set_value(idx, "zone_no", zone_no)
@@ -219,7 +219,7 @@ class PhonePlot:
         # fig = plt.figure()
         # plt.scatter(gps["x"].values, gps["y"].values)
         fig = plt.figure()
-        plt.scatter(gps["northing"].values, gps["easting"].values, s=3.5,)
+        plt.scatter(gps["easting"].values, gps["northing"].values, s=3.5,)
         plt.xlim(UPB_XLIM_NORTHING)
         plt.ylim(UPB_YLIM_EASTING)
         plt.axes().set_aspect('equal')
@@ -231,7 +231,7 @@ class PhonePlot:
 
         self.plotters = []
 
-        plt_steer = ScatterLivePlot(gps, ["northing", "easting"], tp_window_size=tp_window_size,
+        plt_steer = ScatterLivePlot(gps, ["easting", "northing"], tp_window_size=tp_window_size,
                                     xlim=UPB_XLIM_NORTHING, ylim=UPB_YLIM_EASTING, aspect="equal")
         self.plotters.append(plt_steer)
 
