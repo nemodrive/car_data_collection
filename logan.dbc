@@ -1,0 +1,69 @@
+VERSION ""
+
+NS_ :
+	BA_
+	BA_DEF_
+	BA_DEF_DEF_
+	BA_DEF_DEF_REL_
+	BA_DEF_REL_
+	BA_DEF_SGTYPE_
+	BA_REL_
+	BA_SGTYPE_
+	BO_TX_BU_
+	BU_BO_REL_
+	BU_EV_REL_
+	BU_SG_REL_
+	CAT_
+	CAT_DEF_
+	CM_
+	ENVVAR_DATA_
+	EV_DATA_
+	FILTER
+	NS_DESC_
+	SGTYPE_
+	SGTYPE_VAL_
+	SG_MUL_VAL_
+	SIGTYPE_VALTYPE_
+	SIG_GROUP_
+	SIG_TYPE_REF_
+	SIG_VALTYPE_
+	VAL_
+	VAL_TABLE_
+
+BS_:
+
+BU_: DBG DRIVER IO MOTOR SENSOR
+
+BO_ 198 STEERING_SENSORS: 8 IO
+ SG_ STEER_ANGLE : 6|15@0- (0.1,0.1) [-500|500] "deg" NEO
+ SG_ STEER_ANGLE_RATE : 22|16@1+ (0.1,0) [-3000|3000] "" DBG
+
+BO_ 852 SPEED_SENSOR: 8 IO
+ SG_ SPEED_KPS : 7|16@0- (0.01,0) [-500|500] "deg" NEO
+
+BO_ 144 BRAKE_SENSOR: 4 IO
+ SG_ PRESIUNE_C_P : 0|8@1+ (1.0,0) [-500|500] "deg" NEO
+
+CM_ BU_ DRIVER "The driver controller driving the car";
+CM_ BU_ MOTOR "The motor controller of the car";
+CM_ BU_ SENSOR "The sensor controller of the car";
+CM_ BO_ 100 "Sync message used to synchronize the controllers";
+
+BA_DEF_ "BusType" STRING ;
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 0;
+BA_DEF_ SG_ "FieldType" STRING ;
+
+BA_DEF_DEF_ "BusType" "CAN";
+BA_DEF_DEF_ "FieldType" "";
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+
+BA_ "GenMsgCycleTime" BO_ 100 1000;
+BA_ "GenMsgCycleTime" BO_ 500 100;
+BA_ "GenMsgCycleTime" BO_ 101 100;
+BA_ "GenMsgCycleTime" BO_ 400 100;
+BA_ "GenMsgCycleTime" BO_ 200 100;
+BA_ "FieldType" SG_ 100 DRIVER_HEARTBEAT_cmd "DRIVER_HEARTBEAT_cmd";
+BA_ "FieldType" SG_ 500 IO_DEBUG_test_enum "IO_DEBUG_test_enum";
+
+
+VAL_ 500 IO_DEBUG_test_enum 2 "IO_DEBUG_test2_enum_two" 1 "IO_DEBUG_test2_enum_one" ;
