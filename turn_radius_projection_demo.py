@@ -14,7 +14,7 @@ MAX_STEER = 500
 
 
 def get_radius(angle, car_l=CAR_L, car_t=CAR_T):
-    r = car_l/np.deg2rad(angle, dtype=np.float128)
+    r = car_l / np.tan(np.deg2rad(angle, dtype=np.float32))
     return r
 
 
@@ -47,7 +47,8 @@ def get_car_path(r, distance=1., no_points=100, center_x=True, car_l=CAR_L, car_
 
     d_inner = r_inner / r_center * distance
     d_outer = r_outer / r_center * distance
-    center_points = point_on_circle(r_center, distance=distance, no_points=no_points, center_x=False)
+    center_points = point_on_circle(r_center, distance=distance, no_points=no_points,
+                                    center_x=False)
     inner_points = point_on_circle(r_inner, distance=d_inner, no_points=no_points, center_x=False)
     outer_points = point_on_circle(r_outer, distance=d_outer, no_points=no_points, center_x=False)
     if center_x:
@@ -70,7 +71,9 @@ def point_on_circle(r, distance=1., no_points=100, center_x=True):
     fc = 2 * np.pi * r
     p = distance / fc
     step = 2 * np.pi * p / float(no_points)
-    points = np.array([(math.cos(step * x) * r, math.sin(step * x) * r) for x in range(0, no_points + 1)])
+    points = np.array([
+        (math.cos(step * x) * r, math.sin(step * x) * r) for x in range(0, no_points + 1)
+    ])
     if center_x:
         points[:, 0] = points[:, 0] - r
     return points
@@ -83,7 +86,7 @@ class TurnRadius:
         self.min_turning_radius = cfg.min_turning_radius
 
         self.num_points = num_points = 400
-        max_wheel_angle = get_radius(MIN_TURNING_RADIUS)
+        max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
         self.angles = np.linspace(-max_wheel_angle, max_wheel_angle, num_points)
 
     def get_car_path(self, steer_factor, distance=20):
@@ -116,11 +119,11 @@ if __name__ == "__main__":
     plt.show(block=False)
 
     num = 400
-    max_wheel_angle = get_radius(MIN_TURNING_RADIUS)
+    max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
 
     angles = np.linspace(-max_wheel_angle, max_wheel_angle, num)
 
-    idx = int(angles.size /2)
+    idx = int(angles.size / 2)
     while True:
         fig.clear()
         fig.canvas.draw()

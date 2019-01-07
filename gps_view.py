@@ -37,27 +37,31 @@ def rgb_color_range(start, end, cnt):
     return colors
 
 
-def phone_data_to_df(df):
+def phone_data_to_df(file_path):
+    df = pd.read_csv(file_path, sep=";", header=None)
+    df["idx"] = df.index
+
+    df_data = df[2]
     data = []
-    for idx in df.index:
+    for idx in df_data.index:
         try:
-            d = json.loads(df.loc[idx])
+            d = json.loads(df_data.loc[idx])
             d["idx"] = idx
             data.append(d)
         except:
             continue
 
-    return pd.DataFrame.from_dict(data)
+    df_phone = pd.DataFrame.from_dict(data)
+    df_processed = pd.merge(df, df_phone, on="idx")
+
+    return df_processed
 
 
-file_dir = "/media/andrei/Seagate Expansion Drive/nemodrive/1539434900_log/"
+file_dir = "/media/andrei/Samsung_T51/nemodrive/15_nov/1542296320_log/"
 file_path = file_dir + "phone.log"
-df = pd.read_csv(file_path, sep=";", header=None)
 
 df_phone = phone_data_to_df(df[2])
 print (len(df_phone))
-df["idx"] = df.index
-df = pd.merge(df, df_phone, on="idx")
 
 camera_start_tp = 1539434914.730855
 gps = pd.DataFrame.from_dict(list(df["location"].values))
@@ -68,6 +72,20 @@ print ("all", len(gps))
 print ("unique", len(gps["global"].unique()))
 pause = False
 
+# ==================================================================================================
+# -- GPS view
+
+gps = pd.DataFrame.from_dict(list(df["location"].values))
+gps["tp"] = df["tp"]
+gps["global"] = gps["x"] * gps["y"]
+print("GPS_INFO")
+print ("all", len(gps))
+print ("unique", len(gps["global"].unique()))
+pause = False
+
+plt.scatter(gps["x"].values, gps["y"].values)
+
+# ==================================================================================================
 
 color_start = [10, 10, 10]
 color_end = [200, 200, 200]
