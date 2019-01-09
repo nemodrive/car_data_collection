@@ -1,5 +1,11 @@
 import pandas as pd
 import os
+import matplotlib
+matplotlib.use('TkAgg') # <-- THIS MAKES IT FAST!
+# configure backend here
+# matplotlib.use('Agg')
+
+
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import get_interval_cnt_disjoint
@@ -65,7 +71,7 @@ def validate_data(experiment_path):
 
 class DataframeLivePlot:
     def __init__(self, df, data_col, tp_window_size=60., tp_col="tp"):
-        self.df = df = df.sort(tp_col)  # Sort by timestamp
+        self.df = df = df.sort_values(by=[tp_col])  # Sort by timestamp
 
         self.data_col = data_col
         self.tp_col = tp_col
@@ -122,6 +128,8 @@ class DataframeLivePlot:
         ax.clear()
         ax.plot(plot_t.values, data.iloc[start_idx:end_idx].values, color="blue")
         ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
+        # self.fig.savefig("test.svg")
+        # self.fig.canvas.draw()
 
 
 class CanPlot:
@@ -141,6 +149,7 @@ class CanPlot:
     def plot(self, plot_tp):
         for plotter in self.plotters:
             plotter.plot(plot_tp)
+        return True
 
     def get_common_tp(self):
         start_tps = []
@@ -149,10 +158,27 @@ class CanPlot:
         return np.max(start_tps)
 
 
+def async_can_plot(experiment_path, recv_queue, send_queue):
+    can_plot = CanPlot(experiment_path)
+
+    while True:
+        msg = recv_queue.get()
+
+        if msg == -1:
+            break
+
+        r = can_plot.plot(msg)
+
+        plt.show()
+        plt.pause(0.0000001)  # Note this correction
+
+        send_queue.put(("can", r))
+
+
 if __name__ == "__main__":
     import time
     experiment_path = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
-    validate_data(experiment_path)
+    # validate_data(experiment_path)
 
     can_plot = CanPlot(experiment_path)
     start_tp = can_plot.get_common_tp()
@@ -161,6 +187,7 @@ if __name__ == "__main__":
     t = time.time()
     play_speed = 20.
 
+    first = False
     while True:
         s = time.time()
 
@@ -168,9 +195,8 @@ if __name__ == "__main__":
 
         can_plot.plot(crt_tp)
 
-        plt.plot()
-
-        plt.show()
+        plt.draw()
         plt.pause(0.00000000001)
 
-        time.sleep(1/10.)
+        time.sleep(1/30.)
+        print(time.time()-s)

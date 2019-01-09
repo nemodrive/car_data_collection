@@ -13,26 +13,6 @@ import json
 from utils import get_nonblocking, get_local_ip
 
 
-def phone_data_to_df(file_path):
-    df = pd.read_csv(file_path, sep=";", header=None)
-    df["idx"] = df.index
-
-    df_data = df[2]
-    data = []
-    for idx in df_data.index:
-        try:
-            d = json.loads(df_data.loc[idx])
-            d["idx"] = idx
-            data.append(d)
-        except:
-            continue
-
-    df_phone = pd.DataFrame.from_dict(data)
-    df_processed = pd.merge(df, df_phone, on="idx")
-
-    return df_processed
-
-
 def plog(s):
     print('[Phone] {}'.format(s))
 

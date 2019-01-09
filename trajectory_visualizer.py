@@ -16,7 +16,7 @@ CAR_T = 1.733  # Tread
 MIN_TURNING_RADIUS = 5.
 MAX_STEER = 500
 
-CAMERA_POSITION = [0, 1.5422, 1.657]
+CAMERA_POSITION = [0, 1.657, 1.542276316]
 CAMERA_MATRIX = [
     np.array([[1173.122620, 0.000000, 969.335924],
               [0.000000, 1179.612539, 549.524382],
@@ -255,6 +255,7 @@ class TrajectoryVisualizer:
                                                                         GAP_DIST)
 
         c, lw, rw = get_car_path(steering_angle, distance=curve_length)
+        print(c[-2:])
         c = self.add_3rd_dim(c)
         lw = self.add_3rd_dim(lw)
         rw = self.add_3rd_dim(rw)
@@ -309,7 +310,7 @@ def main_revised():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     def get_frame_from_image():
-        rgb = cv2.imread("/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542535225.01_camera_1_off_7ms.jpg")
+        rgb = cv2.imread("/media/andrei/Samsung_T51/nemodrive/24_nov/session1/1543056914.68_camera_3_off_181ms.jpg")
         # return cv2.resize(rgb, (1280, 720))
         return rgb
 

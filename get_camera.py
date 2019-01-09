@@ -385,9 +385,26 @@ class VideoLoad:
                              (0, 0, 255), thickness=6)
 
         frame_view = cv2.resize(frame, (0, 0), fx=scale_view, fy=scale_view)
-
         cv2.imshow(self.filename, frame_view)
+        cv2.waitKey(1)
         return True
+
+
+def async_camera_draw(experiment_path, camera_name, cfg_camera, camera_view_size, flip_view,
+                      recv_queue, send_queue):
+    v = VideoLoad(experiment_path, camera_name, cfg_camera, view_height=camera_view_size,
+                  flip_view=flip_view)
+
+    while True:
+        msg = recv_queue.get()
+        if msg == -1:
+            break
+
+        dif_tp, frame = v.get_closest(msg)
+        v.show(frame)
+        r = True  # TODO Some more relevent response code!?
+
+        send_queue.put((camera_name, r))
 
 
 if __name__ == "__main__":
