@@ -147,9 +147,13 @@ no_unique_val = df_speed["value"].nunique()
 # ==================================================================================================
 # -- PHONE processing
 from phone_data_utils import phone_data_to_df
+from phone_data_utils import get_gps
 
 df = phone_data_to_df(phone_log_path)
-df.to_pickle(phone_log_path + ".pkl")
+gps = get_gps(df)
+merged_data = pd.merge(df, gps, how="outer")
+
+merged_data.to_pickle(phone_log_path + ".pkl")
 
 # ==================================================================================================
 # -- CAMERA processing

@@ -2,10 +2,14 @@ import pandas as pd
 import json
 import os
 from utils import get_interval_cnt_disjoint
+
+import matplotlib
+matplotlib.use('TkAgg') # <-- THIS MAKES IT FAST!
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-# PHONE_FILE = "phone.log"
+PHONE_LOG_FILE = "phone.log"
 PHONE_FILE = "phone.log.pkl"
 
 FREQ_INTERVAL = 1.
@@ -14,8 +18,8 @@ MIN_HZ = 5
 UPB_XLIM_GPS = [26.0446, 26.0524]
 UPB_YLIM_GPS = [44.4346, 44.4404]
 
-UPB_YLIM_EASTING = [443390.0, 444383.]  # recorded [443410.34934956284, 444363.32093989343]
-UPB_XLIM_NORTHING = [2880479., 2881903.]  # recorded [2880499.7528450321, 2881883.3800112251]
+UPB_XLIM_EASTING = [423772., 424808.]  # recorded [423792.118788, 424788.577689]
+UPB_YLIM_NORTHING = [4920534., 4921623.]  # recorded [4920554.23386, 4921603.97505]
 
 # MAX_SIZE = max(np.diff(UPB_YLIM_EASTING)[0], np.diff(UPB_XLIM_NORTHING)[0])
 # UPB_YLIM_EASTING = [UPB_YLIM_EASTING[0], UPB_YLIM_EASTING[0]+MAX_SIZE]
@@ -96,7 +100,7 @@ def validate_data(experiment_path):
 class ScatterLivePlot:
     def __init__(self, df, data_col, tp_window_size=300., tp_col="tp", xlim=None, ylim=None,
                  aspect=None):
-        self.df = df = df.sort(tp_col)  # Sort by timestamp
+        self.df = df = df.sort_values(by=[tp_col])  # Sort by timestamp
 
         self.data_col = data_col
         self.tp_col = tp_col
@@ -175,6 +179,22 @@ class ScatterLivePlot:
         # ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
 
 
+def async_phone_plot(experiment_path, recv_queue, send_queue):
+    phone_plot = PhonePlot(experiment_path)
+
+    while True:
+        msg = recv_queue.get()
+        if msg == -1:
+            break
+
+        r = phone_plot.plot(msg)
+
+        plt.show()
+        plt.pause(0.0000001)  # Note this correction
+
+        send_queue.put(("phone", r))
+
+
 def get_gps(df):
     import utm
     gps = pd.DataFrame.from_dict(list(df["location"].values))
@@ -184,7 +204,10 @@ def get_gps(df):
     gps = gps.assign(**{'easting': -1., 'northing': -1., "zone_no": -1., "zone_letter": ""})
 
     for idx, row in gps.iterrows():
-        easting, northing, zone_no, zone_letter = utm.from_latlon(row["x"], row["y"])
+        easting, northing, zone_no, zone_letter = utm.from_latlon(row["y"], row["x"])
+        gps.set_value(idx, "longitude", row["x"])
+        gps.set_value(idx, "latitude", row["y"])
+        gps.set_value(idx, "altitude", row["z"])
         gps.set_value(idx, "easting", easting)
         gps.set_value(idx, "northing", northing)
         gps.set_value(idx, "zone_no", zone_no)
@@ -192,14 +215,77 @@ def get_gps(df):
 
     return gps
 
-easting = []
-northing = []
-for _f in f:
-    df = pd.read_pickle(_f)
-    gps = get_gps(df)
-    easting.append([gps.easting.min(), gps.easting.max()])
-    northing.append([gps.northing.min(), gps.northing.max()])
-    print ("done")
+
+def gather_all_phone_logs():
+    import glob2
+
+    folder = "/media/andrei/Samsung_T51/nemodrive"
+    all_phone_logs = glob2.glob(folder + "/**/" + PHONE_LOG_FILE)
+
+    phone_dfs = [phone_data_to_df(x) for x in all_phone_logs]
+    gps = [get_gps(x) for x in phone_dfs]
+    merged = [pd.merge(p, g, how="outer") for p, g in zip(phone_dfs, gps)]
+
+    # Write pickle data
+    for merged_data, phone_log_path in zip(merged, all_phone_logs):
+        print (phone_log_path + ".pkl")
+        merged_data.to_pickle(phone_log_path + ".pkl")
+
+    # Plot all data
+    eastings = np.concatenate([x.easting.values for x in gps])
+    northings = np.concatenate([x.northing.values for x in gps])
+
+    fig = plt.figure()
+    plt.scatter(eastings, northings, s=3.5)
+    plt.title("Full GPS")
+    plt.show()
+
+    e_min, e_max = eastings.min(), eastings.max()
+    n_min, n_max = northings.min(), northings.max()
+    print("UPB_XLIM_EASTING = [{}, {}]  "
+          "# recorded [{}, {}]".format(e_min-20, e_max+20, e_min, e_max))
+    print("UPB_YLIM_NORTHING = [{}, {}]  "
+          "# recorded [{}, {}]".format(n_min-20, n_max+20, n_min, n_max))
+
+# easting = []
+# northing = []
+# for _f in f:
+#     df = pd.read_pickle(_f)
+#     gps = get_gps(df)
+#     easting.append([gps.easting.min(), gps.easting.max()])
+#     northing.append([gps.northing.min(), gps.northing.max()])
+#     print ("done")
+
+# from gps_view import rgb_color_range
+# color_start = [10, 10, 10]
+# color_end = [200, 200, 200]
+#
+# df = pd.read_pickle("/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log/phone.log.pkl")
+# pts = pd.read_csv("/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
+#                   "/camera_2_pts.log", header=None)
+# gps = get_gps(df)
+#
+# camera_st_tp = 1542537674.27
+# target_tp = pts.loc[58941][0] + camera_st_tp
+# idx_phone = (df.tp - target_tp).abs().argmin()
+# rows_before = 1000
+# rows_after = 10000
+#
+# data = gps.loc[idx_phone-rows_before: idx_phone+rows_after]
+#
+# colors = rgb_color_range(color_start, color_end, len(data))
+# fig = plt.figure()
+# plt.scatter(data["northing"], data["easting"], s=3.5, c=np.array(colors) / 255., alpha=1)
+#
+# # CRT TP
+# plt.scatter(gps.loc[idx_phone]["northing"],
+#             gps.loc[idx_phone]["easting"], s=30.5, marker='x',c="red", alpha=1)
+# plt.xlim(UPB_XLIM_NORTHING)
+# plt.ylim(UPB_YLIM_EASTING)
+# plt.axes().set_aspect('equal')
+#
+# plt.title("Full GPS")
+# plt.show()
 
 
 class PhonePlot:
@@ -209,7 +295,7 @@ class PhonePlot:
         self.df = df = pd.read_pickle(os.path.join(experiment_path, PHONE_FILE))
 
         # Plot GPS
-        gps = get_gps(df)
+        gps = df[["tp", "easting", "northing", "latitude", "longitude", "global"]]
         self.gps = gps
 
         print("GPS_INFO")
@@ -219,20 +305,30 @@ class PhonePlot:
         # fig = plt.figure()
         # plt.scatter(gps["x"].values, gps["y"].values)
         fig = plt.figure()
-        plt.scatter(gps["northing"].values, gps["easting"].values, s=3.5,)
-        plt.xlim(UPB_XLIM_NORTHING)
-        plt.ylim(UPB_YLIM_EASTING)
+        plt.scatter(gps["easting"].values, gps["northing"].values, s=3.5,)
+        plt.xlim(UPB_XLIM_EASTING)
+        plt.ylim(UPB_YLIM_NORTHING)
         plt.axes().set_aspect('equal')
 
         plt.title("Full GPS")
         plt.show()
         plt.pause(0.0001)
-        key = raw_input("Press key to continue ...")
+        print("DONE FULL GPS VIEW")
+
+
+        fig = plt.figure()
+        plt.title("True Heading")
+        df.trueHeading.plot()
+        plt.show()
+        plt.pause(0.0001)
+        print("True heading plot")
+
+        # key = raw_input("Press key to continue ...")
 
         self.plotters = []
 
-        plt_steer = ScatterLivePlot(gps, ["northing", "easting"], tp_window_size=tp_window_size,
-                                    xlim=UPB_XLIM_NORTHING, ylim=UPB_YLIM_EASTING, aspect="equal")
+        plt_steer = ScatterLivePlot(gps, ["easting", "northing"], tp_window_size=tp_window_size,
+                                    xlim=UPB_XLIM_EASTING, ylim=UPB_YLIM_NORTHING, aspect="equal")
         self.plotters.append(plt_steer)
 
     def plot(self, plot_tp):
@@ -251,10 +347,7 @@ if __name__ == "__main__":
 
     phone_path = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_1/1542549716_log"
     phone_log_path = os.path.join(phone_path, "phone.log")
-    #
-    # df = phone_data_to_df(phone_log_path)
-    # df.to_pickle(phone_log_path + ".pkl")
-    #
+
     phone_plot = PhonePlot(phone_path)
     start_tp = phone_plot.get_common_tp()
     print(start_tp)
