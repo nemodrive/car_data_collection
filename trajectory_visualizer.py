@@ -7,6 +7,7 @@ import math
 import numpy as np
 import cv2
 from argparse import Namespace
+from turn_radius_projection_demo import get_car_path, get_radius, get_car_line_mark
 
 FILTER_NEGATIVE_POINTS = True
 FILTER_NONMONOTONIC_POINTS = True
@@ -23,77 +24,9 @@ CAMERA_MATRIX = [
               [0., 0., 1.]])
 ]
 RVEC = np.array([0.04, 0.0, 0.0])
-TVEC = np.array([0, 0, 0], np.float)  # translation vector
+TVEC = np.array([0.0, 0.0, 0.0])
+
 DISTORTION = np.array([0.053314, -0.117603, -0.004064, -0.001819, 0.000000])
-
-CAMERA_HEIGHT = 1.56
-cauciucuri_exterior = 1.69
-
-
-def get_radius(angle, car_l=CAR_L, car_t=CAR_T):
-    r = car_l / np.tan(np.deg2rad(angle, dtype=np.float32))
-    return r
-
-
-def get_delta(r, car_l=CAR_L, car_t=CAR_T):
-    """
-    :param r: Turn radius ( calculated against back center)
-    :param car_l: Wheel base
-    :param car_t: Tread
-    :return: Angles of front center, inner wheel, outer wheel
-    """
-    delta_i = np.rad2deg(np.arctan(car_l / (r - car_t / 2.)))
-    delta = np.rad2deg(np.arctan(car_l / r))
-    delta_o = np.rad2deg(np.arctan(car_l / (r + car_t / 2.)))
-    return delta, delta_i, delta_o
-
-
-def get_car_path(r, distance=1., no_points=100, center_x=True, car_l=CAR_L, car_t=CAR_T):
-    """
-    :param r: Car turn radius ( against back center )
-    :param distance: Distance to draw points
-    :param no_points: No of points to draw on path
-    :param center_x: If center point on the oX axis
-    :param car_l: Wheel base
-    :param car_t: Tread
-    :return: center_points, inner_points, outer_points (on car path)
-    """
-    r_center = r
-    r_inner = r_center - car_t / 2.
-    r_outer = r_center + car_t / 2.
-
-    d_inner = r_inner / r_center * distance
-    d_outer = r_outer / r_center * distance
-    center_points = point_on_circle(r_center, distance=distance, no_points=no_points,
-                                    center_x=False)
-    inner_points = point_on_circle(r_inner, distance=d_inner, no_points=no_points, center_x=False)
-    outer_points = point_on_circle(r_outer, distance=d_outer, no_points=no_points, center_x=False)
-    if center_x:
-        center_points[:, 0] -= r_center
-        inner_points[:, 0] -= r_center
-        outer_points[:, 0] -= r_center
-
-    return center_points, inner_points, outer_points
-
-
-def point_on_circle(r, distance=1., no_points=100, center_x=True):
-    """
-    Returns a fix number of points on a circle circumference.
-    :param r: circle radius
-    :param distance: length of circumference to generate points for
-    :param no_points: number of points to generate
-    :param center: center points on the x axis ( - r)
-    :return: np. array of 2D points
-    """
-    fc = 2 * np.pi * r
-    p = distance / fc
-    step = 2 * np.pi * p / float(no_points)
-    points = np.array(
-        [(math.cos(step * x) * r, math.sin(step * x) * r) for x in range(0, no_points + 1)]
-    )
-    if center_x:
-        points[:, 0] = points[:, 0] - r
-    return points
 
 
 class TurnRadius:
@@ -128,28 +61,28 @@ class TrajectoryVisualizer:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.rvec = cfg.RVEC
+        self.rvec = cfg.rvec
         self.center_color = cfg.center_color
         self.center_width = cfg.center_width
         self.side_color = cfg.side_color
         self.side_width = cfg.side_width
         self.curve_length = cfg.curve_length
         self.initial_steering = cfg.initial_steering
-        self.RVEC = cfg.RVEC
-        self.TVEC = cfg.TVEC
-        self.CAMERA_MATRIX = cfg.CAMERA_MATRIX
-        self.CAMERA_POSITION = cfg.CAMERA_POSITION
-        self.DISTORTION = cfg.DISTORTION
-        self.MARK_COUNT = cfg.MARK_COUNT
-        self.START_DIST = cfg.START_DIST
-        self.GAP_DIST = cfg.GAP_DIST
-        self.CAMEAR_Y = cfg.CAMEAR_Y
+        self.rvec = cfg.rvec
+        self.tvec = cfg.tvec
+        self.camera_matrix = cfg.camera_matrix
+        self.camera_position = cfg.camera_position
+        self.distortion = cfg.distortion
+        self.mark_count = cfg.mark_count
+        self.start_dist = cfg.start_dist
+        self.gap_dist = cfg.gap_dist
+        self.distance_mark = cfg.distance_mark
 
     def project_points_on_image_space(self, points_3d):
-        rvec = self.RVEC
-        tvec = self.TVEC
-        camera_matrix = self.CAMERA_MATRIX
-        distortion = self.DISTORTION
+        rvec = self.rvec
+        tvec = self.tvec
+        camera_matrix = self.camera_matrix
+        distortion = self.distortion
 
         points = np.array(points_3d).astype(np.float32)
         points, _ = cv2.projectPoints(points, rvec, tvec, camera_matrix, distortion)
@@ -157,12 +90,14 @@ class TrajectoryVisualizer:
         points = points.reshape(-1, 2)
         return points
 
-    def render_line(self, image, points, color=None, thickness=None):
+    def render_line(self, image, points, color=None, thickness=None,
+                    filter_negative=FILTER_NEGATIVE_POINTS,
+                    filter_nonmonotonic=FILTER_NONMONOTONIC_POINTS):
         points = self.project_points_on_image_space(points)
 
         h, w, _ = image.shape
 
-        if FILTER_NEGATIVE_POINTS:
+        if filter_negative:
             idx = 0
             while (points[idx] < 0).any() or points[idx+1][1] < points[idx][1]:
                 idx += 1
@@ -170,6 +105,8 @@ class TrajectoryVisualizer:
                     break
 
             points = points[idx:]
+        else:
+            points = points[(points >= 0).all(axis=1)]
 
         # TODO Check validity - expect monotonic modification on x
         # monotonic decrease on y
@@ -178,13 +115,13 @@ class TrajectoryVisualizer:
 
         prev_x, prev_y = points[0]
         idx = 1
-        if len(points) > 1:
+
+        if len(points) > 1 and filter_nonmonotonic:
             while points[idx][1] < prev_y:
                 prev_x, prev_y = points[idx]
                 idx += 1
                 if idx >= len(points):
                     break
-                print(points[idx])
 
             valid_points = []
             while points[idx][0] >= 0 and points[idx][0] < w and idx < len(points)-1:
@@ -193,9 +130,11 @@ class TrajectoryVisualizer:
         else:
             valid_points = [[prev_x, prev_y]]
 
-        if FILTER_NONMONOTONIC_POINTS:
+        if filter_nonmonotonic:
             points = np.array(valid_points)
 
+        points[:, 0] = np.clip(points[:, 0], 0, w)
+        points[:, 1] = np.clip(points[:, 1], 0, h)
         for p in zip(points, points[1:]):
             image = cv2.line(image, tuple(p[0]), tuple(p[1]), color=color, thickness=thickness)
 
@@ -210,7 +149,7 @@ class TrajectoryVisualizer:
 
         def create_horizontal_line_at_depth(distance_from_camera, left_limit=-CAR_T/2, right_limit=CAR_T/2, n=2):
             x = np.expand_dims(np.linspace(left_limit, right_limit, num=n), axis=1)
-            y = np.ones((n, 1)) * CAMERA_HEIGHT
+            y = np.ones((n, 1))  # * CAMERA_HEIGHT - TODO some hardcoded value
             z = np.ones((n, 1)) * distance_from_camera
             xy = np.concatenate((x, y), axis=1)
             xyz = np.concatenate((xy, z), axis=1)
@@ -229,7 +168,7 @@ class TrajectoryVisualizer:
         return indexes
 
     def add_3rd_dim(self, points):
-        camera_position = self.CAMERA_POSITION
+        camera_position = self.camera_position
 
         points3d = []
         for point in points:
@@ -240,22 +179,22 @@ class TrajectoryVisualizer:
 
         return np.array(points3d)
 
-    def render(self, image, steering_angle):
-        MARK_COUNT = self.MARK_COUNT
-        START_DIST = self.START_DIST
-        GAP_DIST = self.GAP_DIST
+    def render(self, image, radius):
+        mark_count = self.mark_count
+        start_dist = self.start_dist
+        gap_dist = self.gap_dist
         curve_length = self.curve_length
         center_color = self.center_color
         center_width = self.center_width
         side_color = self.side_color
         side_width = self.side_width
 
-        indexes = self.detect_indexes_on_lane_points_for_distance_marks(MARK_COUNT,
-                                                                        START_DIST,
-                                                                        GAP_DIST)
+        indexes = self.detect_indexes_on_lane_points_for_distance_marks(mark_count,
+                                                                        start_dist,
+                                                                        gap_dist)
 
-        c, lw, rw = get_car_path(steering_angle, distance=curve_length)
-        print(c[-2:])
+        c, lw, rw = get_car_path(radius, distance=curve_length)
+        # print(lw[2:])
         c = self.add_3rd_dim(c)
         lw = self.add_3rd_dim(lw)
         rw = self.add_3rd_dim(rw)
@@ -264,31 +203,43 @@ class TrajectoryVisualizer:
         image = self.render_line(image, lw, color=side_color, thickness=side_width)
         image = self.render_line(image, rw, color=side_color, thickness=side_width)
 
-        for index in indexes:
-            image = self.render_line(image, np.array([lw[index], rw[index]]), color=side_color,
-                                     thickness=side_width)
+        # for index in indexes:
+        #     image = self.render_line(image, np.array([lw[index], rw[index]]), color=side_color,
+        #                              thickness=side_width)
+        # Render Distance lines
+        for distance in self.distance_mark:
+            c, lw, rw = get_car_line_mark(radius, distance)
+            line = np.array([lw, rw])
+            line = self.add_3rd_dim(line)
+            # line = self.add_3rd_dim(np.array([[10, -1], [10, 1]]))
+            # print(line)
+            image = self.render_line(image, line, color=(0, 0, 255), thickness=side_width,
+                                     filter_nonmonotonic=False, filter_negative=False)
 
         return image
 
 
 def main_revised():
 
-    cfg_i = {'center_color': (0, 255, 0),
-           'center_width': 4,
-           'side_color': (0, 255, 255),
-           'side_width': 2,
-           'curve_length': 30.0,
-           'initial_steering': -1994.999999999999971, # for this steering we have a straight line of trajectory
+    cfg_i = {
+        'center_color': (0, 255, 0),
+        'center_width': 4,
+        'side_color': (0, 255, 255),
+        'side_width': 2,
+        'curve_length': 30.0,
+        'initial_steering': -1994.999999999999971, # for this steering we have a straight line of trajectory
 
-           'RVEC': RVEC,
-           'TVEC': TVEC,
-           'CAMERA_MATRIX': CAMERA_MATRIX[0],
-           'CAMERA_POSITION': CAMERA_POSITION,
-           'DISTORTION': DISTORTION,
-           'MARK_COUNT': 10,
-           'START_DIST': 6.0,
-           'GAP_DIST': 1.0,
-           'CAMEAR_Y': CAMERA_HEIGHT}
+        'rvec': RVEC,
+        'tvec': TVEC,
+        'camera_matrix': CAMERA_MATRIX[0],
+        'camera_position': CAMERA_POSITION,
+        'distortion': DISTORTION,
+        'mark_count': 10,
+        'start_dist': 6.0,
+        'gap_dist': 1.0,
+        'distance_mark': [3., 5., 10., 20., 30.]
+    }
+
     cfg = Namespace()
     cfg.__dict__ = cfg_i
 
