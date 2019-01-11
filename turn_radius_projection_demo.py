@@ -10,7 +10,6 @@ import numpy as np
 CAR_L = 2.634  # Wheel base
 CAR_T = 1.733  # Tread
 MIN_TURNING_RADIUS = 5.
-MAX_STEER = 500
 
 
 def get_radius(angle, car_l=CAR_L, car_t=CAR_T):
@@ -47,10 +46,10 @@ def get_car_path(r, distance=1., no_points=100, center_x=True, car_l=CAR_L, car_
 
     d_inner = r_inner / r_center * distance
     d_outer = r_outer / r_center * distance
-    center_points = point_on_circle(r_center, distance=distance, no_points=no_points,
-                                    center_x=False)
-    inner_points = point_on_circle(r_inner, distance=d_inner, no_points=no_points, center_x=False)
-    outer_points = point_on_circle(r_outer, distance=d_outer, no_points=no_points, center_x=False)
+    center_points = points_on_circle(r_center, distance=distance, no_points=no_points,
+                                     center_x=False)
+    inner_points = points_on_circle(r_inner, distance=d_inner, no_points=no_points, center_x=False)
+    outer_points = points_on_circle(r_outer, distance=d_outer, no_points=no_points, center_x=False)
     if center_x:
         center_points[:, 0] -= r_center
         inner_points[:, 0] -= r_center
@@ -59,7 +58,14 @@ def get_car_path(r, distance=1., no_points=100, center_x=True, car_l=CAR_L, car_
     return center_points, inner_points, outer_points
 
 
-def point_on_circle(r, distance=1., no_points=100, center_x=True):
+def get_car_line_mark(r, distance, center_x=True, car_l=CAR_L, car_t=CAR_T):
+    center_point, inner_point, outer_point = get_car_path(r, distance, no_points=1,
+                                                          center_x=center_x,
+                                                          car_l=car_l, car_t=car_t)
+    return center_point[1], inner_point[1], outer_point[1]
+
+
+def points_on_circle(r, distance=1., no_points=100, center_x=True):
     """
     Returns a fix number of points on a circle circumference.
     :param r: circle radius
@@ -68,15 +74,34 @@ def point_on_circle(r, distance=1., no_points=100, center_x=True):
     :param center: center points on the x axis ( - r)
     :return: np. array of 2D points
     """
-    fc = 2 * np.pi * r
+    fc = r
     p = distance / fc
-    step = 2 * np.pi * p / float(no_points)
+    step = p / float(no_points)
     points = np.array([
         (math.cos(step * x) * r, math.sin(step * x) * r) for x in range(0, no_points + 1)
     ])
     if center_x:
         points[:, 0] = points[:, 0] - r
     return points
+
+
+def get_car_offset(r, arc_length, center_x=True):
+    """
+    arc_len = r * Omega # omega angle in radians
+    http://mathcentral.uregina.ca/QQ/database/QQ.09.07/s/bruce1.html
+
+    :param r: circle radius
+    :param distance: length of circumference to generate points for
+    :param center: center points on the x axis ( - r)
+    :return: np. array of 2D points
+    """
+    angle = arc_length / r
+    x_offset = r - r * math.cos(angle)
+    y_offset = r * math.sin(angle)
+    point = np.array([x_offset, y_offset])
+    if center_x:
+        point[:, 0] = point[:, 0] - r
+    return point
 
 
 class TurnRadius:
@@ -122,6 +147,8 @@ if __name__ == "__main__":
     max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
 
     angles = np.linspace(-max_wheel_angle, max_wheel_angle, num)
+
+    c, lw, rw = get_car_line_mark(r, distance=20)
 
     idx = int(angles.size / 2)
     while True:
