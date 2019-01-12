@@ -3,10 +3,6 @@ matplotlib.use('TkAgg')  # <-- THIS MAKES IT FAST!
 
 import pandas as pd
 import os
-# configure backend here
-# matplotlib.use('Agg')
-
-
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import get_interval_cnt_disjoint
@@ -16,6 +12,15 @@ STEER_FILE = "steer.csv"
 
 FREQ_INTERVAL = 1.
 MIN_HZ = 5
+
+CMD_NAMES = dict({
+    # cmd_name, data_name, can_id
+    "speed": ("SPEED_SENSOR", "SPEED_KPS", "354"),
+    "steer": ("STEERING_SENSORS", "STEER_ANGLE"),
+    "brake": ("BRAKE_SENSOR", "PRESIUNE_C_P")
+})
+
+DBC_FILE = "logan.dbc"
 
 
 def validate_data(experiment_path):
@@ -47,8 +52,8 @@ def validate_data(experiment_path):
 
     print("="*30, " Steering info ", "="*30)
     fig = plt.figure()
-    steer.steering.plot(title="Steering")
-    print(steer.steering.describe())
+    steer.steer.plot(title="steer")
+    print(steer.steer.describe())
     print("\n")
 
     steer_log_hz, margin_tp = get_interval_cnt_disjoint(steer, FREQ_INTERVAL, min_hz=MIN_HZ)
@@ -146,7 +151,7 @@ class CanPlot:
         self.plotters.append(plt_speed)
 
         self.steer = pd.read_csv(os.path.join(experiment_path, STEER_FILE))
-        plt_steer = DataframeLivePlot(self.steer, "steering", tp_window_size=tp_window_size)
+        plt_steer = DataframeLivePlot(self.steer, "steer", tp_window_size=tp_window_size)
         self.plotters.append(plt_steer)
 
     def plot(self, plot_tp):
