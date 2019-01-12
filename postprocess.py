@@ -99,7 +99,7 @@ df_can_steer["steer"] = df_can_steer["data_str"].apply(lambda x: get_can_data(db
 
 # Make default correction
 df_can_steer["can_steer"] = df_can_steer["steer"]
-df_can_steer["steer"] = df_can_steer["steer"] - OFFSET_STEERING
+df_can_steer["steer"] = df_can_steer["steer"] + OFFSET_STEERING
 
 # Write to csv
 steer_file = os.path.join(LOG_FOLDER, "steer.csv")

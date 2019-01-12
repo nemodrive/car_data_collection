@@ -16,7 +16,7 @@ MIN_HZ = 5
 CMD_NAMES = dict({
     # cmd_name, data_name, can_id
     "speed": ("SPEED_SENSOR", "SPEED_KPS", "354"),
-    "steer": ("STEERING_SENSORS", "STEER_ANGLE"),
+    "steer": ("STEERING_SENSORS", "STEER_ANGLE", "0C6"),
     "brake": ("BRAKE_SENSOR", "PRESIUNE_C_P")
 })
 
@@ -109,9 +109,12 @@ class DataframeLivePlot:
         ax = self.ax
         min_data, max_data = self.min_data, self.max_data
         min_tp = self.min_tp
+        df = self.df
 
         start_tp = max(plot_tp - tp_window_size//2, min_tp)
         end_tp = start_tp + tp_window_size
+
+        closest_idx = (tp -plot_tp).abs().argmin()
 
         if start_tp < tp.iloc[start_idx]:
             # Move bck to required timestamp
@@ -135,16 +138,15 @@ class DataframeLivePlot:
         ax.clear()
         ax.plot(plot_t.values, data.iloc[start_idx:end_idx].values, color="blue")
         ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
-        # self.fig.savefig("test.svg")
-        # plt.draw()
-        # plt.pause(0.000001)
+        return df.loc[closest_idx]
 
 
 class CanPlot:
     def __init__(self, experiment_path, tp_window_size=60.):
-        plt.ion() ## Note this correction
+        plt.ion()  # Note this correction
 
         self.plotters = []
+        self.plot_data = ["speed", "steer"]
 
         self.speed = pd.read_csv(os.path.join(experiment_path, SPEED_FILE))
         plt_speed = DataframeLivePlot(self.speed, "speed", tp_window_size=tp_window_size)
@@ -155,9 +157,10 @@ class CanPlot:
         self.plotters.append(plt_steer)
 
     def plot(self, plot_tp):
-        for plotter in self.plotters:
-            plotter.plot(plot_tp)
-        return True
+        responses = dict()
+        for plot_name, plotter in zip(self.plot_data, self.plotters):
+            responses[plot_name] = plotter.plot(plot_tp)
+        return responses
 
     def get_common_tp(self):
         start_tps = []

@@ -233,27 +233,27 @@ if __name__ == "__main__":
         elif key != 255:
             print("Unknown key: {}".format(key))
 
-        if collect.camera:
-            print ("------")
-            for v in video_loders:
-                v.put(crt_tp)
-                # dif_tp, frame = v.get_closest(crt_tp)
-                # v.show(frame)
-
         # if collect.obd:
         #     obd_data = obd_loader.get_closest(crt_tp)
 
         if collect.can:
             # can_plot.put(crt_tp)
-            can_plot.plot(crt_tp)
+            can_r = can_plot.plot(crt_tp)
+
+        if collect.camera:
+            print ("------")
+            for v in video_loders:
+                v.put([0, crt_tp, can_r["steer"]["steer"]])
+                # dif_tp, frame = v.get_closest(crt_tp)
+                # v.show(frame)
 
         if collect.phone:
             # phone_plot.put(crt_tp)
             phone_plot.plot(crt_tp)
 
-        # send bulk messages to Queus
-        for send_queue in send_queues:
-            send_queue.put(crt_tp)
+        # # send bulk messages to Queus
+        # for send_queue in send_queues:
+        #     send_queue.put(crt_tp)
 
         # TODO Plot magnetometer
 

@@ -65,10 +65,9 @@ def get_car_path(r, distance=1., no_points=100, center_x=True, car_t=CAR_T):
     return center_points, inner_points, outer_points
 
 
-def get_car_line_mark(r, distance, center_x=True, car_l=CAR_L, car_t=CAR_T):
+def get_car_line_mark(r, distance, center_x=True, car_t=CAR_T):
     center_point, inner_point, outer_point = get_car_path(r, distance, no_points=1,
-                                                          center_x=center_x,
-                                                          car_l=car_l, car_t=car_t)
+                                                          center_x=center_x, car_t=car_t)
     return center_point[1], inner_point[1], outer_point[1]
 
 

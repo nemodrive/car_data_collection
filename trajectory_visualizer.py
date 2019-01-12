@@ -7,7 +7,7 @@ import math
 import numpy as np
 import cv2
 from argparse import Namespace
-from car_utils import get_car_path, get_radius, get_car_line_mark
+from car_utils import get_car_path, get_radius, get_car_line_mark, WHEEL_STEER_RATIO
 
 FILTER_NEGATIVE_POINTS = True
 FILTER_NONMONOTONIC_POINTS = True
@@ -27,6 +27,25 @@ RVEC = np.array([0.04, 0.0, 0.0])
 TVEC = np.array([0.0, 0.0, 0.0])
 
 DISTORTION = np.array([0.053314, -0.117603, -0.004064, -0.001819, 0.000000])
+
+DEFAULT_CFG = {
+    'center_color': (0, 255, 0),
+    'center_width': 4,
+    'side_color': (0, 255, 255),
+    'side_width': 2,
+    'curve_length': 30.0,
+    'initial_steer': -1994.999999999999971,  # for this steer we have a straight line of trajectory
+
+    'rvec': RVEC,
+    'tvec': TVEC,
+    'camera_matrix': CAMERA_MATRIX[0],
+    'camera_position': CAMERA_POSITION,
+    'distortion': DISTORTION,
+    'mark_count': 10,
+    'start_dist': 6.0,
+    'gap_dist': 1.0,
+    'distance_mark': [3., 5., 10., 20., 30.]
+}
 
 
 class TurnRadius:
@@ -61,18 +80,17 @@ class TrajectoryVisualizer:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.rvec = cfg.rvec
+        self.rvec = np.array(cfg.rvec)
         self.center_color = cfg.center_color
         self.center_width = cfg.center_width
         self.side_color = cfg.side_color
         self.side_width = cfg.side_width
         self.curve_length = cfg.curve_length
         self.initial_steer = cfg.initial_steer
-        self.rvec = cfg.rvec
-        self.tvec = cfg.tvec
-        self.camera_matrix = cfg.camera_matrix
-        self.camera_position = cfg.camera_position
-        self.distortion = cfg.distortion
+        self.tvec = np.array(cfg.tvec)
+        self.camera_matrix = np.array(cfg.camera_matrix)
+        self.camera_position = np.array(cfg.camera_position)
+        self.distortion = np.array(cfg.distortion)
         self.mark_count = cfg.mark_count
         self.start_dist = cfg.start_dist
         self.gap_dist = cfg.gap_dist
@@ -179,6 +197,10 @@ class TrajectoryVisualizer:
 
         return np.array(points3d)
 
+    def render_steer(self, image, steer_angle):
+        r = get_radius(steer_angle / WHEEL_STEER_RATIO)
+        return self.render(image, r)
+
     def render(self, image, radius):
         mark_count = self.mark_count
         start_dist = self.start_dist
@@ -221,24 +243,7 @@ class TrajectoryVisualizer:
 
 def main_revised():
 
-    cfg_i = {
-        'center_color': (0, 255, 0),
-        'center_width': 4,
-        'side_color': (0, 255, 255),
-        'side_width': 2,
-        'curve_length': 30.0,
-        'initial_steer': -1994.999999999999971, # for this steer we have a straight line of trajectory
-
-        'rvec': RVEC,
-        'tvec': TVEC,
-        'camera_matrix': CAMERA_MATRIX[0],
-        'camera_position': CAMERA_POSITION,
-        'distortion': DISTORTION,
-        'mark_count': 10,
-        'start_dist': 6.0,
-        'gap_dist': 1.0,
-        'distance_mark': [3., 5., 10., 20., 30.]
-    }
+    cfg_i = DEFAULT_CFG
 
     cfg = Namespace()
     cfg.__dict__ = cfg_i
@@ -255,14 +260,12 @@ def main_revised():
     }
 
     cap = cv2.VideoCapture(0) # 0 for built-in webcam, 1 for secondary, 2 for third ...
-    #cap = cv2.VideoCapture('camera_3.mp4')
     cv2.destroyAllWindows()
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     def get_frame_from_image():
         rgb = cv2.imread("/media/andrei/Samsung_T51/nemodrive/24_nov/session1/1543056914.68_camera_3_off_181ms.jpg")
-        # return cv2.resize(rgb, (1280, 720))
         return rgb
 
     def get_frame_from_webcam():
