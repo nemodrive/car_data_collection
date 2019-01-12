@@ -6,14 +6,21 @@
 import matplotlib.pyplot as plt
 import math
 import numpy as np
+import pandas as pd
 
-CAR_L = 2.634  # Wheel base
-CAR_T = 1.733  # Tread
-MIN_TURNING_RADIUS = 5.
+CAR_L = 2.634  # Wheel base - ampatament
+CAR_T = 1.497  # Tread - ecartament fata vs 1.486 ecartament spate
+MIN_TURNING_RADIUS = 5. # Seems ok, found specs with 5.25 or 5.5, though
+WHEEL_STEER_RATIO = 20.
+
+# OFFSET_STEERING = 16.904771342679405
+# OFFSET_STEERING = 16.394771342679383
+OFFSET_STEERING = 15.794771342679383
+# Best so far - record MAX can wheel turn -> diff with 5.m radius
 
 
-def get_radius(angle, car_l=CAR_L, car_t=CAR_T):
-    r = car_l / np.tan(np.deg2rad(angle, dtype=np.float32))
+def get_radius(wheel_angle, car_l=CAR_L):
+    r = car_l / np.tan(np.deg2rad(wheel_angle, dtype=np.float64))
     return r
 
 
@@ -30,7 +37,7 @@ def get_delta(r, car_l=CAR_L, car_t=CAR_T):
     return delta, delta_i, delta_o
 
 
-def get_car_path(r, distance=1., no_points=100, center_x=True, car_l=CAR_L, car_t=CAR_T):
+def get_car_path(r, distance=1., no_points=100, center_x=True, car_t=CAR_T):
     """
     :param r: Car turn radius ( against back center )
     :param distance: Distance to draw points
@@ -85,7 +92,7 @@ def points_on_circle(r, distance=1., no_points=100, center_x=True):
     return points
 
 
-def get_car_offset(r, arc_length, center_x=True):
+def get_car_offset(r, arc_length, center_x=False):
     """
     arc_len = r * Omega # omega angle in radians
     http://mathcentral.uregina.ca/QQ/database/QQ.09.07/s/bruce1.html
@@ -100,30 +107,66 @@ def get_car_offset(r, arc_length, center_x=True):
     y_offset = r * math.sin(angle)
     point = np.array([x_offset, y_offset])
     if center_x:
-        point[:, 0] = point[:, 0] - r
+        point[0] = point[0] - r
     return point
 
 
-class TurnRadius:
-    def __init__(self, cfg):
-        self.car_l = cfg.car_l
-        self.car_t = cfg.car_t
-        self.min_turning_radius = cfg.min_turning_radius
+def get_car_can_pat(speed_df, steer_df):
+    """ Approximate car coordinates from CAN info: speed & steer"""
+    import datetime
 
-        self.num_points = num_points = 400
-        max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
-        self.angles = np.linspace(-max_wheel_angle, max_wheel_angle, num_points)
+    speed_df = speed_df.sort_values("tp")
+    steer_df = steer_df.sort_values("tp")
 
-    def get_car_path(self, steer_factor, distance=20):
-        """
-        :param steer_factor: [-1, 1] (max left max right)
-        :return:
-        """
-        num_points = self.num_points
-        idx = np.clip(int(num_points/2. * steer_factor + num_points/2.), 0, num_points-1)
-        r = get_radius(self.angles[idx])
-        c, lw, rw = get_car_path(r, distance=distance)
-        return c, lw, rw
+    # Update steer and speed (might be initialized correctly already)
+    speed_df.steer = steer_df.can_steer + OFFSET_STEERING
+    speed_df["mps"] = speed_df.speed * 1000 / 3600.
+
+    ss = pd.merge(speed_df, steer_df, how="outer", on=["tp"])
+    ss = ss.sort_values("tp")
+
+    # Make sure first row has values
+    first_speed = speed_df.iloc[0]["mps"]
+    first_steer = steer_df.iloc[0]["steer"]
+    first_idx = ss.iloc[0].name
+    ss.set_value(first_idx, "mps", first_speed)
+    ss.set_value(first_idx, "steer", first_steer)
+
+    # Time interpolation of steer and speed
+    ss["rel_tp"] = ss.tp - ss.tp.min()
+    ss["datetime"] = ss.tp.apply(datetime.fromtimestamp)
+    ss = ss.set_index("datetime")
+    ss.mps = ss.mps.interpolate(method="time")
+    ss.steer = ss.steer.interpolate(method="time") * -1
+    ss.radius = (ss.steer / WHEEL_STEER_RATIO).apply(get_radius)
+
+    dist = (ss.mps[1:].values + ss.mps[:-1].values) / 2. * \
+           (ss.rel_tp[1:].values - ss.rel_tp[:-1].values)
+    r = ss.radius.values[1:]
+    omega = dist / r
+    omega = -omega.cumsum()[:-1]
+
+    assert not np.isnan(dist).any(), "Got NaN values when calculating <dist?"
+    assert not np.isnan(r).any(), "Got NaN values when calculating <r>"
+    assert not np.isnan(omega).any(), "Got NaN values when calculating <omega>"
+
+    data = np.column_stack([r, dist])
+    car_offset = [get_car_offset(_r, _d) for _r, _d in data]
+    car_offset = np.array(car_offset)
+
+    cos_angle = np.cos(omega)
+    sin_angle = np.sin(omega)
+
+    x = car_offset[1:, 0]
+    y = car_offset[1:, 1]
+
+    x2 = cos_angle * x - sin_angle * y
+    y2 = sin_angle * x + cos_angle * y
+    car_pos = np.column_stack([x2, y2])
+    car_pos = np.vstack([[0, 0], car_offset[0], car_pos])
+
+    car_pos = np.cumsum(car_pos, axis=0)
+    return car_pos
 
 
 if __name__ == "__main__":
@@ -167,7 +210,7 @@ if __name__ == "__main__":
         plt.axis('equal')
         plt.show(block=False)
 
-        q = raw_input("key:\n")
+        q = input("key:\n")
         if q == "q":
             idx -= 1
         elif q == "w":
