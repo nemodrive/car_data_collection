@@ -7,7 +7,7 @@ import math
 import numpy as np
 import cv2
 from argparse import Namespace
-from turn_radius_projection_demo import get_car_path, get_radius, get_car_line_mark
+from car_utils import get_car_path, get_radius, get_car_line_mark
 
 FILTER_NEGATIVE_POINTS = True
 FILTER_NONMONOTONIC_POINTS = True
@@ -67,7 +67,7 @@ class TrajectoryVisualizer:
         self.side_color = cfg.side_color
         self.side_width = cfg.side_width
         self.curve_length = cfg.curve_length
-        self.initial_steering = cfg.initial_steering
+        self.initial_steer = cfg.initial_steer
         self.rvec = cfg.rvec
         self.tvec = cfg.tvec
         self.camera_matrix = cfg.camera_matrix
@@ -141,10 +141,10 @@ class TrajectoryVisualizer:
         return image
 
     def detect_indexes_on_lane_points_for_distance_marks(self, mark_count, start_dist, dist_gap):
-        initial_steering = self.initial_steering
+        initial_steer = self.initial_steer
         curve_length = self.curve_length
 
-        c, lw, rw = get_car_path(initial_steering, distance=curve_length)
+        c, lw, rw = get_car_path(initial_steer, distance=curve_length)
         lw = self.add_3rd_dim(lw)
 
         def create_horizontal_line_at_depth(distance_from_camera, left_limit=-CAR_T/2, right_limit=CAR_T/2, n=2):
@@ -227,7 +227,7 @@ def main_revised():
         'side_color': (0, 255, 255),
         'side_width': 2,
         'curve_length': 30.0,
-        'initial_steering': -1994.999999999999971, # for this steering we have a straight line of trajectory
+        'initial_steer': -1994.999999999999971, # for this steer we have a straight line of trajectory
 
         'rvec': RVEC,
         'tvec': TVEC,
