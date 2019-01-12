@@ -1,7 +1,8 @@
+import matplotlib
+matplotlib.use('TkAgg')  # <-- THIS MAKES IT FAST!
+
 import pandas as pd
 import os
-import matplotlib
-matplotlib.use('TkAgg') # <-- THIS MAKES IT FAST!
 # configure backend here
 # matplotlib.use('Agg')
 
@@ -80,6 +81,7 @@ class DataframeLivePlot:
         self.min_tp = tp.min()
         self.plot_tps = tp - tp.min()
         self.tp_window_size = tp_window_size
+
         self.fig, self.ax = plt.subplots()
         self.min_data, self.max_data = data.min(), data.max()
         self.fig.suptitle(data_col)
@@ -129,7 +131,8 @@ class DataframeLivePlot:
         ax.plot(plot_t.values, data.iloc[start_idx:end_idx].values, color="blue")
         ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
         # self.fig.savefig("test.svg")
-        # self.fig.canvas.draw()
+        # plt.draw()
+        # plt.pause(0.000001)
 
 
 class CanPlot:
@@ -161,6 +164,7 @@ class CanPlot:
 def async_can_plot(experiment_path, recv_queue, send_queue):
     can_plot = CanPlot(experiment_path)
 
+    print("CAN READY to start live plot...")
     while True:
         msg = recv_queue.get()
 
@@ -177,7 +181,7 @@ def async_can_plot(experiment_path, recv_queue, send_queue):
 
 if __name__ == "__main__":
     import time
-    experiment_path = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
+    experiment_path = "/media/nemodrive3/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
     # validate_data(experiment_path)
 
     can_plot = CanPlot(experiment_path)

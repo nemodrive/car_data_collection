@@ -1,10 +1,10 @@
+import matplotlib
+matplotlib.use('TkAgg')  # <-- THIS MAKES IT FAST!
+
 import pandas as pd
 import json
 import os
 from utils import get_interval_cnt_disjoint
-
-import matplotlib
-matplotlib.use('TkAgg') # <-- THIS MAKES IT FAST!
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -95,6 +95,29 @@ def validate_data(experiment_path):
         print("{} - {} ({}s)".format(min, max, max-min))
         sum_margin += max-min
     print("Total seconds: {}\n".format(sum_margin))
+    plt.show()
+    plt.pause(0.0000001)  # Note this correction
+
+    print("GPS_INFO")
+    print("________ All:", len(gps))
+    print("________ unique", len(gps["global"].unique()))
+
+    fig = plt.figure()
+    plt.scatter(gps["easting"].values, gps["northing"].values, s=3.5, )
+    plt.xlim(UPB_XLIM_EASTING)
+    plt.ylim(UPB_YLIM_NORTHING)
+    plt.axes().set_aspect('equal')
+    plt.title("Full GPS")
+    plt.show()
+    plt.pause(0.0001)
+    print("DONE FULL GPS VIEW")
+
+    fig = plt.figure()
+    plt.title("True Heading")
+    df.trueHeading.plot()
+    plt.show()
+    plt.pause(0.0001)
+    print("True heading plot")
 
 
 class ScatterLivePlot:
@@ -109,9 +132,13 @@ class ScatterLivePlot:
         self.min_tp = tp.min()
         self.plot_tps = tp - tp.min()
         self.tp_window_size = tp_window_size
+
         self.fig, self.ax = plt.subplots()
         self.min_data, self.max_data = data.min(), data.max()
+
         self.fig.suptitle(" - ".join(data_col))
+        plt.draw()
+        plt.pause(0.000001)
 
         self.xlim = xlim
         self.ylim = ylim
@@ -166,21 +193,23 @@ class ScatterLivePlot:
             crt_plt_idx += 1
 
         plot_d = data.iloc[start_idx:end_idx].values
-        ax.clear()
-        ax.scatter(plot_d[:, 0], plot_d[:, 1], color="blue", s=3.5,)
-        ax.scatter(plot_d[crt_plt_idx, 0], plot_d[crt_plt_idx, 1], color="red", s=5.5,)
-        if self.xlim is not None:
-            self.ax.set_xlim(*self.xlim)
-        if self.ylim is not None:
-            self.ax.set_ylim(*self.ylim)
-        if self.aspect is not None:
-            self.ax.set_aspect(self.aspect)
+        if len(plot_d) > 0:
+            ax.clear()
+            ax.scatter(plot_d[:, 0], plot_d[:, 1], color="blue", s=3.5,)
+            ax.scatter(plot_d[crt_plt_idx, 0], plot_d[crt_plt_idx, 1], color="red", s=5.5,)
+            if self.xlim is not None:
+                self.ax.set_xlim(*self.xlim)
+            if self.ylim is not None:
+                self.ax.set_ylim(*self.ylim)
+            if self.aspect is not None:
+                self.ax.set_aspect(self.aspect)
 
-        # ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
+            # ax.plot([plot_tp - min_tp]*2, [min_data, max_data], color="red")
 
 
 def async_phone_plot(experiment_path, recv_queue, send_queue):
     phone_plot = PhonePlot(experiment_path)
+    print("PHONE READY to start live plot...")
 
     while True:
         msg = recv_queue.get()
@@ -215,6 +244,44 @@ def get_gps(df):
 
     return gps
 
+
+def get_attitude(df):
+    df = pd.read_pickle("/media/nemodrive3/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log/phone.log.pkl")
+    attitude = pd.DataFrame.from_dict(list(df["attitudeEularAngles"].values))
+    attitude = pd.DataFrame.from_dict(list(df["attitude"].values))
+    attitude["tp"] = df["tp"]
+    phone_start_tp = attitude.tp.min()
+    attitude["tp_rel"] = attitude.tp - attitude.tp.min()
+
+    plt.plot(attitude.tp_rel, attitude.x) # - attitude.x.loc[0])
+    plt.plot(attitude.tp_rel, attitude.y) # - attitude.y.loc[0])
+    plt.plot(attitude.tp_rel, attitude.z) # - attitude.z.loc[0])
+    plt.plot(attitude.tp_rel, attitude.w - attitude.w.loc[0])
+
+    acc = pd.DataFrame.from_dict(list(df["acceleration"].values))
+    acc["tp"] = df["tp"]
+    phone_start_tp = attitude.tp.min()
+    acc["tp_rel"] = acc.tp - acc.tp.min()
+
+    plt.plot(acc.tp_rel, acc.x)
+    plt.plot(acc.tp_rel, acc.y)
+    plt.plot(acc.tp_rel, acc.z)
+    plt.plot(acc.tp_rel, acc.w - acc.w.loc[0])
+
+    attitude_start_move_off = 48.5
+    attitude_start_move = phone_start_tp + attitude_start_move_off
+
+    df_can_speed = pd.read_csv("/media/nemodrive3/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log/speed.csv")
+    can_first_move_tp = df_can_speed[df_can_speed.speed > 0].iloc[0]["tp"]
+
+    print("Diff: {}".format(can_first_move_tp - attitude_start_move))
+
+    start_camera_2 = (phone_start_tp + 62.5) - 51.18  # - camera_2_move
+
+    Diff: 0.6711456775665283
+    Diff: 0.60382080078125
+    Diff: 0.909038782119751
+    Diff: 0.4892098903656006
 
 def gather_all_phone_logs():
     import glob2
@@ -298,32 +365,6 @@ class PhonePlot:
         gps = df[["tp", "easting", "northing", "latitude", "longitude", "global"]]
         self.gps = gps
 
-        print("GPS_INFO")
-        print("________ All:", len(gps))
-        print("________ unique", len(gps["global"].unique()))
-
-        # fig = plt.figure()
-        # plt.scatter(gps["x"].values, gps["y"].values)
-        fig = plt.figure()
-        plt.scatter(gps["easting"].values, gps["northing"].values, s=3.5,)
-        plt.xlim(UPB_XLIM_EASTING)
-        plt.ylim(UPB_YLIM_NORTHING)
-        plt.axes().set_aspect('equal')
-
-        plt.title("Full GPS")
-        plt.show()
-        plt.pause(0.0001)
-        print("DONE FULL GPS VIEW")
-
-
-        fig = plt.figure()
-        plt.title("True Heading")
-        df.trueHeading.plot()
-        plt.show()
-        plt.pause(0.0001)
-        print("True heading plot")
-
-        # key = raw_input("Press key to continue ...")
 
         self.plotters = []
 
@@ -345,7 +386,7 @@ class PhonePlot:
 if __name__ == "__main__":
     import time
 
-    phone_path = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_1/1542549716_log"
+    phone_path = "/media/nemodrive3/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
     phone_log_path = os.path.join(phone_path, "phone.log")
 
     phone_plot = PhonePlot(phone_path)
@@ -362,9 +403,7 @@ if __name__ == "__main__":
 
         phone_plot.plot(crt_tp)
 
-        plt.plot()
-
-        plt.show()
+        plt.draw()
         plt.pause(0.00000000001)
 
         time.sleep(1/10.)
