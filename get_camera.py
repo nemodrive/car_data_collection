@@ -39,7 +39,7 @@ import pandas as pd
 import glob
 import numpy as np
 import math
-from turn_radius_projection_demo import TurnRadius
+from car_utils import TurnRadius
 
 from utils import get_nonblocking
 
