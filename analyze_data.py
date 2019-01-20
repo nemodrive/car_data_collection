@@ -226,7 +226,8 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     i += 1
     print(f"Done {i}/{len(phone_splits)}")
 
-result, new_points, gps_unique = result
+new_points, gps_unique, result_opti  = result
+
 fig = plt.figure()
 plt.scatter(new_points.coord_x, new_points.coord_y, s=1.)
 plt.axes().set_aspect('equal')

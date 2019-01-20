@@ -196,7 +196,8 @@ def get_points_rotated(coord, orientation, offset_x, offset_y):
 
 def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
                                      guess_orientation=180., guess_offest_x=0., guess_offest_y=0.,
-                                     guess_steering_offset=OFFSET_STEERING):
+                                     guess_steering_offset=OFFSET_STEERING,
+                                     maxiter=4000., tol=1e-10, fatol=1e-10):
     import scipy.optimize as optimize
 
     gps_unique = gps_unique_points.copy()
@@ -244,8 +245,8 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
         return diff
 
     initial_guess = [guess_orientation, guess_offest_x, guess_offest_y, guess_steering_offset]
-    result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=1e-15,
-                               options={'maxiter': 4000, "fatol": 1e-15})
+    result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=tol,
+                               options={'maxiter': maxiter, "fatol": fatol})
 
     best_orientation, best_offest_x, best_offest_y, best_steering_offset = result["x"]
 
