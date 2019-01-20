@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import math
 import numpy as np
 import pandas as pd
+from datetime import datetime
+import math
 
 CAR_L = 2.634  # Wheel base - ampatament
 CAR_T = 1.497  # Tread - ecartament fata vs 1.486 ecartament spate
@@ -110,15 +112,16 @@ def get_car_offset(r, arc_length, center_x=False):
     return point
 
 
-def get_car_can_pat(speed_df, steer_df):
+def get_car_can_path(speed_df, steer_df, steering_offset=OFFSET_STEERING):
     """ Approximate car coordinates from CAN info: speed & steer"""
-    import datetime
+    # speed_df, steer_df = speed.copy(), steer.copy()
+    # ss = None
 
     speed_df = speed_df.sort_values("tp")
     steer_df = steer_df.sort_values("tp")
 
     # Update steer and speed (might be initialized correctly already)
-    speed_df.steer = steer_df.can_steer + OFFSET_STEERING
+    steer_df.steer = steer_df.can_steer + steering_offset
     speed_df["mps"] = speed_df.speed * 1000 / 3600.
 
     ss = pd.merge(speed_df, steer_df, how="outer", on=["tp"])
@@ -128,8 +131,8 @@ def get_car_can_pat(speed_df, steer_df):
     first_speed = speed_df.iloc[0]["mps"]
     first_steer = steer_df.iloc[0]["steer"]
     first_idx = ss.iloc[0].name
-    ss.set_value(first_idx, "mps", first_speed)
-    ss.set_value(first_idx, "steer", first_steer)
+    ss.at[first_idx, "mps"] = first_speed
+    ss.at[first_idx, "steer"] = first_steer
 
     # Time interpolation of steer and speed
     ss["rel_tp"] = ss.tp - ss.tp.min()
@@ -137,7 +140,7 @@ def get_car_can_pat(speed_df, steer_df):
     ss = ss.set_index("datetime")
     ss.mps = ss.mps.interpolate(method="time")
     ss.steer = ss.steer.interpolate(method="time") * -1
-    ss.radius = (ss.steer / WHEEL_STEER_RATIO).apply(get_radius)
+    ss["radius"] = (ss.steer / WHEEL_STEER_RATIO).apply(get_radius)
 
     dist = (ss.mps[1:].values + ss.mps[:-1].values) / 2. * \
            (ss.rel_tp[1:].values - ss.rel_tp[:-1].values)
@@ -161,11 +164,238 @@ def get_car_can_pat(speed_df, steer_df):
 
     x2 = cos_angle * x - sin_angle * y
     y2 = sin_angle * x + cos_angle * y
-    car_pos = np.column_stack([x2, y2])
-    car_pos = np.vstack([[0, 0], car_offset[0], car_pos])
+    rel_move = np.column_stack([x2, y2])
+    rel_move = np.vstack([[0, 0], car_offset[0], rel_move])
 
-    car_pos = np.cumsum(car_pos, axis=0)
-    return car_pos
+    cum_coord = np.cumsum(rel_move, axis=0)
+
+    df_coord = pd.DataFrame(np.column_stack([rel_move, cum_coord, ss.tp.values]), columns=[
+        "move_x", "move_y", "coord_x", "coord_y", "tp"])
+
+    # fig = plt.figure()
+    # plt.scatter(car_pos[:60000, 0], car_pos[:60000, 1], s=1.)
+    # plt.axes().set_aspect('equal')
+
+    return df_coord
+
+
+def get_points_rotated(coord, orientation, offset_x, offset_y):
+    omega = np.deg2rad(orientation)
+    cos_o = np.cos(omega)
+    sin_o = np.sin(omega)
+
+    r = np.array([[cos_o, -sin_o], [sin_o, cos_o]])
+
+    new_coord = np.dot(r, coord.transpose()).transpose()
+
+    offset = np.array([offset_x, offset_y])
+    new_coord = new_coord + offset
+
+    return new_coord
+
+
+def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
+                                     guess_orientation=180., guess_offest_x=0., guess_offest_y=0.,
+                                     guess_steering_offset=OFFSET_STEERING):
+    import scipy.optimize as optimize
+
+    gps_unique = gps_unique_points.copy()
+    gps_unique["datetime"] = gps_unique.tp.apply(datetime.fromtimestamp)
+    gps_unique = gps_unique.set_index("datetime")
+
+    gps_unique.loc[:, "target_x"] = gps_unique.easting - gps_unique.iloc[0].easting
+    gps_unique.loc[:, "target_y"] = gps_unique.northing - gps_unique.iloc[0].northing
+
+    def fit_2d_curve(params):
+
+        orientation, offset_x, offset_y, steering_offset = params
+
+        can_coord = get_car_can_path(speed, steer, steering_offset=steering_offset)
+
+        # ==========================================================================================
+        # -- Can optimize code ... (operations that can be done not every curve fit)
+
+        can_coord.loc[:, "datetime"] = can_coord.tp.apply(datetime.fromtimestamp).values
+        df_coord = can_coord.set_index("datetime")
+
+        nearest_car_pos = df_coord.reindex(gps_unique.index, method='nearest')
+
+        merge_info = gps_unique.merge(nearest_car_pos, how="outer", left_index=True,
+                                      right_index=True)
+
+        coord = merge_info[["coord_x", "coord_y"]].values
+
+        target = merge_info[["target_x", "target_y"]].values
+
+        # ==========================================================================================
+
+        omega = np.deg2rad(orientation)
+        cos_o = np.cos(omega)
+        sin_o = np.sin(omega)
+
+        r = np.array([[cos_o, -sin_o], [sin_o, cos_o]])
+
+        new_coord = np.dot(r, coord.transpose()).transpose()
+
+        offset = np.array([offset_x, offset_y])
+        new_coord = new_coord + offset
+
+        diff = np.linalg.norm(new_coord - target, axis=1).sum()
+        return diff
+
+    initial_guess = [guess_orientation, guess_offest_x, guess_offest_y, guess_steering_offset]
+    result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=1e-15,
+                               options={'maxiter': 4000, "fatol": 1e-15})
+
+    best_orientation, best_offest_x, best_offest_y, best_steering_offset = result["x"]
+
+    df_coord = get_car_can_path(speed, steer, steering_offset=best_steering_offset)
+
+    all_coord = df_coord[["move_x", "move_y"]].values
+    all_coord = np.cumsum(all_coord, axis=0)
+
+    new_points = get_points_rotated(all_coord, *result.x[:3])
+    new_points = pd.DataFrame(np.column_stack([new_points, df_coord.tp.values]),
+                              columns=["coord_x", "coord_y", "tp"])
+
+    return new_points, gps_unique, result
+
+
+def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
+                 guess_offest_x=0., guess_offest_y=0.):
+    """
+    :param df_coord: Pandas dataframe with columns ["move_x", "move_y", "tp"]
+    :param gps_data: Pandas dataframe with columns ["easting", "northing", "tp"]
+    :param guess_orientation, guess_offest_x, guess_offest_y
+    :return:
+    """
+    import scipy.optimize as optimize
+
+    # Approximate course
+
+    df_coord.loc[:, "datetime"] = df_coord.tp.apply(datetime.fromtimestamp).values
+    df_coord = df_coord.set_index("datetime")
+
+    # gps_unique = gps_data[
+    #     (gps_data.tp >= df_coord.tp.min()) & (gps_data.tp <= df_coord.tp.max())
+    # ].groupby(['loc_tp']).head(1)
+    gps_unique = gps_unique_points
+    gps_unique["datetime"] = gps_unique.tp.apply(datetime.fromtimestamp)
+    gps_unique = gps_unique.set_index("datetime")
+
+    nearest_car_pos = df_coord.reindex(gps_unique.index, method='nearest')
+
+    # Filter out time interval
+    # max_tp = gps_unique.tp.min() + 300.
+    #
+    # gps_unique = gps_unique[gps_unique.tp < max_tp]
+    # nearest_car_pos = nearest_car_pos[nearest_car_pos.tp < max_tp]
+
+    merge_info = gps_unique.merge(nearest_car_pos, how="outer", left_index=True, right_index=True)
+    merge_info.loc[:, "target_x"] = merge_info.easting - merge_info.iloc[0].easting
+    merge_info.loc[:, "target_y"] = merge_info.northing - merge_info.iloc[0].northing
+
+    coord = merge_info[["move_x", "move_y"]].values
+    coord = np.cumsum(coord, axis=0)
+
+    target = merge_info[["target_x", "target_y"]]
+
+    def fit_2d_curve(params):
+
+        orientation, offset_x, offset_y = params
+
+        omega = np.deg2rad(orientation)
+        cos_o = np.cos(omega)
+        sin_o = np.sin(omega)
+
+        r = np.array([[cos_o, -sin_o], [sin_o, cos_o]])
+
+        new_coord = np.dot(r, coord.transpose()).transpose()
+
+        offset = np.array([offset_x, offset_y])
+        new_coord = new_coord + offset
+
+        diff = np.linalg.norm(new_coord - target, axis=1).sum()
+        return diff
+
+    # -------------
+    initial_guess = [guess_orientation, guess_offest_x, guess_offest_y]
+    result = optimize.minimize(fit_2d_curve, initial_guess)
+
+    all_coord = df_coord[["move_x", "move_y"]].values
+    all_coord = np.cumsum(all_coord, axis=0)
+
+    new_points = get_points_rotated(all_coord, *result.x)
+    new_points = pd.DataFrame(np.column_stack([new_points, df_coord.tp.values]),
+                              columns=["coord_x", "coord_y", "tp"])
+    #
+    # fig = plt.figure()
+    # plt.scatter(target[:, 0], target[:, 1], s=1.)
+    # plt.axes().set_aspect('equal')
+    #
+    # # -------------
+    #
+    # fig = plt.figure()
+    # plt.scatter(nearest_car_pos.move_x, nearest_car_pos.move_y, s=1.)
+    # plt.axes().set_aspect('equal')
+    #
+    # fig = plt.figure()
+    # plt.scatter(gps_unique.easting, gps_unique.northing, s=1.)
+    # plt.axes().set_aspect('equal')
+
+    return new_points, result
+
+
+def get_car_path_orientation(phone, steer, speed, aprox_t_period=1.0, aprox_t_length=36.,
+                             prev_t_factor=0.):
+
+    first_tp, max_tp = phone.tp.min(), phone.tp.max()
+    data_t_len = max_tp - first_tp
+
+    starts = np.arange(0, data_t_len, aprox_t_period) + first_tp
+
+    # Filter first still coord
+    starts = starts[starts > speed[speed.speed > 0].iloc[0]["tp"]]
+    ends = starts + aprox_t_length
+
+    gps_data = phone.groupby(['loc_tp']).head(1)
+    gps_data = gps_data[["easting", "northing", "tp"]]
+
+    can_coord = get_car_can_path(speed, steer)
+
+    all_results = []
+    gps_splits = []
+    for t_start, t_end in zip(starts, ends):
+        gps_data_split = gps_data[(gps_data.tp >= t_start) & (gps_data.tp < t_end)]
+        gps_splits.append(gps_data_split)
+        can_coord_split = can_coord[(can_coord.tp >= t_start) & (can_coord.tp < t_end)]
+
+        if len(gps_data_split) <= 0:
+            print(f"No gps data in [{t_start}, {t_end}]")
+            continue
+
+        if len(can_coord_split) <= 0:
+            print(f"No can_coord_split data in [{t_start}, {t_end}]")
+            continue
+
+        # can_coord[""]
+        new_points = get_rotation(can_coord_split.copy(), gps_data_split.copy())
+        all_results.append(new_points)
+
+        if len(all_results) > 100:
+            break
+
+    idx = 0
+    x = all_results[idx][0]
+
+    fig = plt.figure()
+    plt.plot(x["coord_x"], x["coord_y"])
+    plt.axes().set_aspect('equal')
+
+    gps = gps_splits[idx]
+    fig = plt.figure()
+    plt.scatter(gps.easting - gps.easting.min(), gps.northing - gps.northing.min())
+    plt.axes().set_aspect('equal')
 
 
 if __name__ == "__main__":
