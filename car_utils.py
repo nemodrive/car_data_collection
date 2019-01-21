@@ -398,6 +398,38 @@ def get_car_path_orientation(phone, steer, speed, aprox_t_period=1.0, aprox_t_le
     plt.scatter(gps.easting - gps.easting.min(), gps.northing - gps.northing.min())
     plt.axes().set_aspect('equal')
 
+def get_car_path_approximation(phone, steer, speed, gps_points_approx=10.,
+                               steering_offset=OFFSET_STEERING)
+    first_tp, max_tp = phone.tp.min(), phone.tp.max()
+
+    gps_data = phone.groupby(['loc_tp']).head(1)
+    gps_data = gps_data[["easting", "northing", "tp"]]
+
+    can_coord = get_car_can_path(speed, steer, steering_offset=steering_offset)
+
+    for i_start in range(len(gps_data)):
+        for approx_range in range(1, gps_points_approx + 1):
+            i_end = i_start + approx_range
+            if i_end > len(gps_data) - 1:
+                continue
+
+            # Approximate curve for data between gps_unique.iloc[i_start, i_end]
+            tp_start = gps_data.iloc[i_start].tp
+            tp_end = gps_data.iloc[i_end].tp
+
+            gps_data_split = gps_data.iloc[i_start: i_end+1].copy()
+            # steer_split = steer[(steer.tp >= tp_start) & (steer.tp <= tp_end)].copy()
+            # speed_split = speed[(speed.tp >= tp_start) & (speed.tp <= tp_end)].copy()
+            can_coord_split = can_coord[(can_coord.tp >= tp_start) & (can_coord.tp < tp_end)].copy()
+
+            # Recalculate coord_move just for segment
+            rel_move = can_coord_split[["move_x", "move_y"]].values
+            cum_coord = np.cumsum(rel_move, axis=0)
+            can_coord_split.loc[:, "coord_x"] = cum_coord[:, 0]
+            can_coord_split.loc[:, "coord_y"] = cum_coord[:, 1]
+
+            new_points = get_rotation(can_coord_split, gps_data_split)
+
 
 if __name__ == "__main__":
     # You probably won't need this if you're embedding things in a tkinter plot...
