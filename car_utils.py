@@ -197,7 +197,7 @@ def get_points_rotated(coord, orientation, offset_x, offset_y):
 def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
                                      guess_orientation=180., guess_offest_x=0., guess_offest_y=0.,
                                      guess_steering_offset=OFFSET_STEERING,
-                                     maxiter=4000., tol=1e-10, fatol=1e-10):
+                                     maxiter=4000., tol=1e-10, fatol=1e-10, simple=False):
     import scipy.optimize as optimize
 
     gps_unique = gps_unique_points.copy()
@@ -245,8 +245,14 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
         return diff
 
     initial_guess = [guess_orientation, guess_offest_x, guess_offest_y, guess_steering_offset]
-    result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=tol,
-                               options={'maxiter': maxiter, "fatol": fatol})
+    if simple:
+        result = optimize.minimize(fit_2d_curve, initial_guess, tol=tol)
+    else:
+        result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=tol,
+                                   options={'maxiter': maxiter, "fatol": fatol})
+
+    loss = fit_2d_curve(result["x"])
+    result["loss"] = loss
 
     best_orientation, best_offest_x, best_offest_y, best_steering_offset = result["x"]
 
@@ -263,7 +269,8 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
 
 
 def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
-                 guess_offest_x=0., guess_offest_y=0.):
+                 guess_offest_x=0., guess_offest_y=0.,
+                 maxiter=4000., tol=1e-10, fatol=1e-10, simple=True):
     """
     :param df_coord: Pandas dataframe with columns ["move_x", "move_y", "tp"]
     :param gps_data: Pandas dataframe with columns ["easting", "northing", "tp"]
@@ -291,15 +298,17 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     #
     # gps_unique = gps_unique[gps_unique.tp < max_tp]
     # nearest_car_pos = nearest_car_pos[nearest_car_pos.tp < max_tp]
+    gps_unique.loc[:, "target_x"] = gps_unique.easting - gps_unique.iloc[0].easting
+    gps_unique.loc[:, "target_y"] = gps_unique.northing - gps_unique.iloc[0].northing
 
     merge_info = gps_unique.merge(nearest_car_pos, how="outer", left_index=True, right_index=True)
-    merge_info.loc[:, "target_x"] = merge_info.easting - merge_info.iloc[0].easting
-    merge_info.loc[:, "target_y"] = merge_info.northing - merge_info.iloc[0].northing
 
-    coord = merge_info[["move_x", "move_y"]].values
-    coord = np.cumsum(coord, axis=0)
+    coord = merge_info[["coord_x", "coord_y"]].values
 
-    target = merge_info[["target_x", "target_y"]]
+    # coord = merge_info[["move_x", "move_y"]].values
+    # coord = np.cumsum(coord, axis=0)
+
+    target = merge_info[["target_x", "target_y"]].values
 
     def fit_2d_curve(params):
 
@@ -321,7 +330,21 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
 
     # -------------
     initial_guess = [guess_orientation, guess_offest_x, guess_offest_y]
-    result = optimize.minimize(fit_2d_curve, initial_guess)
+
+    result = optimize.minimize(fit_2d_curve, initial_guess )
+    loss = fit_2d_curve(result["x"])
+    result["loss"] = loss
+
+    # result = optimize.minimize(fit_2d_curve, initial_guess, method='BFGS', tol=1e-15,
+    #                            options={'gtol': 1e-05, 'norm': np.inf, 'eps': 1.4901161193847656e-14, 'maxiter': 4000})
+    # loss = fit_2d_curve(result["x"])
+    # print(loss)
+    #
+    # result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=1e-15,
+    #                            options={'maxiter': 4000, "fatol": 1e-15})
+    # loss = fit_2d_curve(result["x"])
+    # print(loss)
+
 
     all_coord = df_coord[["move_x", "move_y"]].values
     all_coord = np.cumsum(all_coord, axis=0)
@@ -344,7 +367,7 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     # plt.scatter(gps_unique.easting, gps_unique.northing, s=1.)
     # plt.axes().set_aspect('equal')
 
-    return new_points, result
+    return new_points, gps_unique, result
 
 
 def get_car_path_orientation(phone, steer, speed, aprox_t_period=1.0, aprox_t_length=36.,
