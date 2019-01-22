@@ -7,7 +7,7 @@ import glob
 import re
 import subprocess
 
-LOG_FOLDER = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
+LOG_FOLDER = "/media/nemodrive0/Samsung_T5/nemodrive/15_nov/1542296320_log"
 CAN_FILE_PATH = os.path.join(LOG_FOLDER, "can_raw.log")
 OBD_SPEED_FILE = LOG_FOLDER + "obd_SPEED.log"
 CAMERA_FILE_PREFIX = os.path.join(LOG_FOLDER, "camera_*")
@@ -151,7 +151,7 @@ for camera_log in camera_logs_path:
 video_start_pts = np.array(video_start_pts)
 
 # Approximate which is the first frame where the car moves
-video_frame_move = np.array([1444, 1411, 1438])
+video_frame_move = np.array([9597, 9572, 9637])
 
 # Extract pts of frame
 pts_df = [
