@@ -215,10 +215,14 @@ for data_dict in DATA:
 from car_utils import get_rotation_and_steering_offset
 from multiprocessing import Pool as ThreadPool
 
+all_res = []
+
+no+=1
+
 def get_rotation_and_steering_offset_mt(args):
     speed, steer, gps_unique_points, task = args
     print(f"Start {task}...")
-    result = get_rotation_and_steering_offset(speed, steer, gps_unique_points)
+    result = get_rotation_and_steering_offset(speed, steer, gps_unique_points, simple=False, idx=task)
     print(f"Done {task}!")
     return result
 
@@ -235,6 +239,7 @@ results = pool.map(get_rotation_and_steering_offset_mt, args)
 pool.close()
 pool.join()
 
+# ==============================================================================================
 # Iterative version
 results = []
 # i = 3
@@ -247,15 +252,20 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     results.append(result)
     i += 1
     print(f"Done {i}/{len(phone_splits)}")
+# ==============================================================================================
 
 # save data to disk
+fld = "/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/optimize_with_ratio/optim_offset_ratio_18"
 steer_optimization = dict({"DATA": DATA, "results": results, "args": args})
-np.save("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/steer_optimization.npy", steer_optimization)
+np.save(f"{fld}/steer_optimization_{no}.npy", steer_optimization)
 
-steer_optimization = np.load("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/steer_optimization.npy").item()
-DATA = steer_optimization["DATA"]
-results = steer_optimization["results"]
-args = steer_optimization["args"]
+# # Load from disk
+# steer_optimization = np.load(f"{fld}/steer_optimization.npy").item()
+# DATA = steer_optimization["DATA"]
+# results = steer_optimization["results"]
+# args = steer_optimization["args"]
+#
+# Run plot
 steer_offset_res = []
 
 nrows = 5
@@ -270,22 +280,54 @@ for idx, (new_points, gps_unique, result_opti) in enumerate(results):
     ax.scatter(gps_unique.target_x, gps_unique.target_y, s=1., c="b")
     ax.set_aspect('equal')
 
-
+    # best_orientation, best_offest_x, best_offest_y, best_steering_offset, best_wheel_steer_ratio = result_opti["x"]
     best_orientation, best_offest_x, best_offest_y, best_steering_offset = result_opti["x"]
+    # best_steering_offset = OFFSET_STEERING
     ax.set_title(f"i:{idx} - s:{best_steering_offset}")
 
     steer_offset_res.append(best_steering_offset)
 
+fig.set_size_inches(18.55, 9.86)
+fig.savefig(f"{fld}/calc_wheel_ratio_{no}.png")
 
+# res_info = pd.DataFrame([[*r[2]["x"], r[2]["success"], r[2]["message"], r[2]["nit"]] for r in results],
+#                                 columns=["oritentaion", "offset_x", "offset_y", "wheel_steer_ratio",
+#                                          "success", "meessage", "nit"])
 res_info = pd.DataFrame([[*r[2]["x"], r[2]["success"], r[2]["message"], r[2]["nit"]] for r in results],
-                                columns=["oritentaion", "offset_x", "offset_y", "steering_offset", "success",
-                                         "meessage", "nit"])
-res_info.to_csv("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/optimization_info.csv",
+                                columns=["oritentaion", "offset_x", "offset_y", "steering_offset",
+                                         "success", "meessage", "nit"])
+res_info.to_csv(f"{fld}/optimization_info.csv",
                 float_format = '%.14f')
+
+all_res.append(res_info)
+
+# Other stupid
 
 fig = plt.figure()
 res_info.steering_offset.plot(kind="bar")
 fig.suptitle("Calculated steerings by optimization", fontsize=16)
+
+# MERge
+res_info pd.concat(all_res)
+res_info = res_info.reset_index()
+res_info = res_info.rename_axis({"index":"idx"}, axis=1)
+
+# Wheel ration analysis
+ignore_wheel = [0, 1, 5, 6, 8, 13, 16, 17, 18, 19]
+wheel_steer_ratio_s = res_info[[x not in ignore_wheel for x in res_info["idx"]]].wheel_steer_ratio
+
+fig = plt.figure()
+wheel_steer_ratio_s.plot()
+
+wheel_steer_ratio_s.describe()
+# count    40.000000
+# mean     18.053225
+# std       0.812695
+# min      16.955807
+# 25%      17.350352
+# 50%      17.947226
+# 75%      18.581726
+# max      19.416291
 
 # Try different steering offsets
 from car_utils import get_rotation, get_car_can_path

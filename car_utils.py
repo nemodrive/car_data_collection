@@ -13,11 +13,13 @@ import math
 CAR_L = 2.634  # Wheel base - ampatament
 CAR_T = 1.497  # Tread - ecartament fata vs 1.486 ecartament spate
 MIN_TURNING_RADIUS = 5. # Seems ok, found specs with 5.25 or 5.5, though
-WHEEL_STEER_RATIO = 20.
+# WHEEL_STEER_RATIO = 18.053225
+WHEEL_STEER_RATIO = 18.0
 
 # OFFSET_STEERING = 16.904771342679405
 # OFFSET_STEERING = 16.394771342679383
-OFFSET_STEERING = 15.794771342679383
+# OFFSET_STEERING = 15.794771342679383
+OFFSET_STEERING = 15.720720720720720
 # Best so far - record MAX can wheel turn -> diff with 5.m radius
 
 
@@ -112,7 +114,7 @@ def get_car_offset(r, arc_length, center_x=False):
     return point
 
 
-def get_car_can_path(speed_df, steer_df, steering_offset=OFFSET_STEERING):
+def get_car_can_path(speed_df, steer_df, steering_offset=OFFSET_STEERING, wheel_steer_ratio=WHEEL_STEER_RATIO):
     """ Approximate car coordinates from CAN info: speed & steer"""
     # speed_df, steer_df = speed.copy(), steer.copy()
     # ss = None
@@ -140,7 +142,7 @@ def get_car_can_path(speed_df, steer_df, steering_offset=OFFSET_STEERING):
     ss = ss.set_index("datetime")
     ss.mps = ss.mps.interpolate(method="time")
     ss.steer = ss.steer.interpolate(method="time") * -1
-    ss["radius"] = (ss.steer / WHEEL_STEER_RATIO).apply(get_radius)
+    ss["radius"] = (ss.steer / wheel_steer_ratio).apply(get_radius)
 
     dist = (ss.mps[1:].values + ss.mps[:-1].values) / 2. * \
            (ss.rel_tp[1:].values - ss.rel_tp[:-1].values)
@@ -197,7 +199,8 @@ def get_points_rotated(coord, orientation, offset_x, offset_y):
 def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
                                      guess_orientation=180., guess_offest_x=0., guess_offest_y=0.,
                                      guess_steering_offset=OFFSET_STEERING,
-                                     maxiter=4000., tol=1e-10, fatol=1e-10, simple=False):
+                                     guess_wheel_steer_ratio=WHEEL_STEER_RATIO,
+                                     maxiter=4000., tol=1e-10, fatol=1e-10, simple=False, idx=-1):
     import scipy.optimize as optimize
 
     gps_unique = gps_unique_points.copy()
@@ -209,9 +212,14 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
 
     def fit_2d_curve(params):
 
-        orientation, offset_x, offset_y, steering_offset = params
+        # WHEEL_STEER_RATIO OPTIM
+        # orientation, offset_x, offset_y, wheel_steer_ratio = params
+        # can_coord = get_car_can_path(speed, steer, wheel_steer_ratio=wheel_steer_ratio)
 
-        can_coord = get_car_can_path(speed, steer, steering_offset=steering_offset)
+        # OFFSET_STEERING OPTIM
+        orientation, offset_x, offset_y, steering_offset = params
+        can_coord = get_car_can_path(speed, steer, steering_offset=steering_offset,
+                                     wheel_steer_ratio=guess_wheel_steer_ratio)
 
         # ==========================================================================================
         # -- Can optimize code ... (operations that can be done not every curve fit)
@@ -241,12 +249,21 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
         offset = np.array([offset_x, offset_y])
         new_coord = new_coord + offset
 
-        diff = np.linalg.norm(new_coord - target, axis=1).sum()
+        diff = np.linalg.norm(new_coord - target, axis=1).sum() * 1000
         return diff
 
+    # initial_guess = [guess_orientation, guess_offest_x, guess_offest_y, guess_wheel_steer_ratio]
+    # if idx in [0, 1, 5, 8, 13, 16]:
+    #     bnd_wheel_steel_ratio = (18., 18.)
+    # else:
+    #     bnd_wheel_steel_ratio = (17., 21.)
+    # bnds = ((0., 350.), (-4., 4.), (-4., 4.), bnd_wheel_steel_ratio)
+
     initial_guess = [guess_orientation, guess_offest_x, guess_offest_y, guess_steering_offset]
+    bnds = ((0., 350.), (-4., 4.), (-4., 4.), (14., 20.))
+
     if simple:
-        result = optimize.minimize(fit_2d_curve, initial_guess, tol=tol)
+        result = optimize.minimize(fit_2d_curve, initial_guess, tol=tol, options={'maxiter': 1500})
     else:
         result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=tol,
                                    options={'maxiter': maxiter, "fatol": fatol})
@@ -255,8 +272,13 @@ def get_rotation_and_steering_offset(speed, steer, gps_unique_points,
     result["loss"] = loss
 
     best_orientation, best_offest_x, best_offest_y, best_steering_offset = result["x"]
+    best_wheel_steer_ratio = guess_wheel_steer_ratio
 
-    df_coord = get_car_can_path(speed, steer, steering_offset=best_steering_offset)
+    # best_steering_offset = OFFSET_STEERING
+    # best_orientation, best_offest_x, best_offest_y, best_wheel_steer_ratio = result["x"]
+
+    df_coord = get_car_can_path(speed, steer, steering_offset=best_steering_offset,
+                                wheel_steer_ratio=best_wheel_steer_ratio)
 
     all_coord = df_coord[["move_x", "move_y"]].values
     all_coord = np.cumsum(all_coord, axis=0)
