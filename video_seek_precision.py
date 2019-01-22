@@ -2,8 +2,9 @@ import cv2
 import random
 import numpy as np
 
-n = random.randint(2, 12987)
-n = 12987
+
+with open("/home/andrei/Documents/images.txt", "r") as f:
+    data = f.readlines()
 
 video = "/media/andrei/CE04D7C504D7AF291/nemodrive/data_collect/data/1533228223_log/camera_2.mkv"
 # Normal
