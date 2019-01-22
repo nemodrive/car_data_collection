@@ -93,7 +93,7 @@ def load_experiment_data(experiment_path):
 
 
 def main():
-    exp = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
+    exp = "/media/nemodrive3/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
     steer = pd.read_csv("{}/steer.csv".format(exp))
     speed = pd.read_csv("{}/speed.csv".format(exp))
@@ -182,6 +182,10 @@ DATA = [
     }
 ]
 
+phone_splits = []
+steer_splits = []
+speed_splits = []
+
 for data_dict in DATA:
     experiment_path = data_dict["exp_path"]
     gps_unique_idx = data_dict["gps_unique_idx"]
@@ -192,11 +196,77 @@ for data_dict in DATA:
 
     gps_unique = phone.groupby(['loc_tp']).head(1)
 
-    phone_splits = []
-    steer_splits = []
-    speed_splits = []
     for i, j in gps_unique_idx:
         tp_start, tp_end = gps_unique.iloc[i]["tp"], gps_unique.iloc[j]["tp"]
+
+        phone_split = phone[(phone.tp >= tp_start) & (phone.tp < tp_end)]
+        steer_split = steer[(steer.tp >= tp_start) & (steer.tp < tp_end)]
+        speed_split = speed[(speed.tp >= tp_start) & (speed.tp < tp_end)]
+
+        phone_splits.append(phone_split)
+        steer_splits.append(steer_split)
+        speed_splits.append(speed_split)
+
+LOOPS = [
+    {
+        "exp_path": f"{base_exp_path}/18_nov/session_0/1542537659_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["00:00.0", "10:46.12"],
+            ["11:17.26", "15:00.9"],
+            ["14:58.1", "18:29.26"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/18_nov/session_1/1542549716_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["05:40.29", "09:26.15"],
+            ["19:21.26", "21:12.21"],
+            ["22:06.27", "23:09.23"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/24_nov/session0/1543059528_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["01:27.5", "07:04.16"],
+            ["06:38.6", "12:13.29"],
+            ["23:49.6", "27:45.2"],
+        ]
+    }
+]
+
+def parse_time_format(s, fps=30.):
+    """ Format MM:SS.f """
+    m, sf = s.split(":")
+    m = float(m)
+    s, f = [float(x) for x in sf.split(".")]
+
+    time_interval = m * 60. + s + 1. /fps * f
+    return time_interval
+
+phone_splits = []
+steer_splits = []
+speed_splits = []
+
+for data_dict in LOOPS:
+    experiment_path = data_dict["exp_path"]
+
+    phone = pd.read_pickle("{}/phone.log.pkl".format(experiment_path))
+    steer = pd.read_csv("{}/steer.csv".format(experiment_path))
+    speed = pd.read_csv("{}/speed.csv".format(experiment_path))
+    reference_time = data_dict['reference_time']
+    time_intervals = data_dict["tp"]
+
+    with open(f"{experiment_path}/{reference_time}") as f:
+        camera_start_tp = float(f.read())
+
+    gps_unique = phone.groupby(['loc_tp']).head(1)
+
+    for i, j in time_intervals:
+        tp_start = parse_time_format(i) + camera_start_tp
+        tp_end = parse_time_format(j) + camera_start_tp
 
         phone_split = phone[(phone.tp >= tp_start) & (phone.tp < tp_end)]
         steer_split = steer[(steer.tp >= tp_start) & (steer.tp < tp_end)]
@@ -213,10 +283,14 @@ for data_dict in DATA:
 from car_utils import get_rotation_and_steering_offset
 from multiprocessing import Pool as ThreadPool
 
+all_res = []
+
+no+=1
+
 def get_rotation_and_steering_offset_mt(args):
     speed, steer, gps_unique_points, task = args
     print(f"Start {task}...")
-    result = get_rotation_and_steering_offset(speed, steer, gps_unique_points)
+    result = get_rotation_and_steering_offset(speed, steer, gps_unique_points, simple=False, idx=task)
     print(f"Done {task}!")
     return result
 
@@ -233,6 +307,7 @@ results = pool.map(get_rotation_and_steering_offset_mt, args)
 pool.close()
 pool.join()
 
+# ==============================================================================================
 # Iterative version
 results = []
 # i = 3
@@ -245,15 +320,20 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     results.append(result)
     i += 1
     print(f"Done {i}/{len(phone_splits)}")
+# ==============================================================================================
 
 # save data to disk
+fld = "/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/optimize_with_ratio/optim_offset_ratio_18"
 steer_optimization = dict({"DATA": DATA, "results": results, "args": args})
-np.save("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/steer_optimization.npy", steer_optimization)
+np.save(f"{fld}/steer_optimization_{no}.npy", steer_optimization)
 
-steer_optimization = np.load("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/steer_optimization.npy").item()
-DATA = steer_optimization["DATA"]
-results = steer_optimization["results"]
-args = steer_optimization["args"]
+# # Load from disk
+# steer_optimization = np.load(f"{fld}/steer_optimization.npy").item()
+# DATA = steer_optimization["DATA"]
+# results = steer_optimization["results"]
+# args = steer_optimization["args"]
+#
+# Run plot
 steer_offset_res = []
 
 nrows = 5
@@ -268,32 +348,64 @@ for idx, (new_points, gps_unique, result_opti) in enumerate(results):
     ax.scatter(gps_unique.target_x, gps_unique.target_y, s=1., c="b")
     ax.set_aspect('equal')
 
-
+    # best_orientation, best_offest_x, best_offest_y, best_steering_offset, best_wheel_steer_ratio = result_opti["x"]
     best_orientation, best_offest_x, best_offest_y, best_steering_offset = result_opti["x"]
+    # best_steering_offset = OFFSET_STEERING
     ax.set_title(f"i:{idx} - s:{best_steering_offset}")
 
     steer_offset_res.append(best_steering_offset)
 
+fig.set_size_inches(18.55, 9.86)
+fig.savefig(f"{fld}/calc_wheel_ratio_{no}.png")
 
+# res_info = pd.DataFrame([[*r[2]["x"], r[2]["success"], r[2]["message"], r[2]["nit"]] for r in results],
+#                                 columns=["oritentaion", "offset_x", "offset_y", "wheel_steer_ratio",
+#                                          "success", "meessage", "nit"])
 res_info = pd.DataFrame([[*r[2]["x"], r[2]["success"], r[2]["message"], r[2]["nit"]] for r in results],
-                                columns=["oritentaion", "offset_x", "offset_y", "steering_offset", "success",
-                                         "meessage", "nit"])
-res_info.to_csv("/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/optimization_info.csv",
+                                columns=["oritentaion", "offset_x", "offset_y", "steering_offset",
+                                         "success", "meessage", "nit"])
+res_info.to_csv(f"{fld}/optimization_info.csv",
                 float_format = '%.14f')
+
+all_res.append(res_info)
+
+# Other stupid
 
 fig = plt.figure()
 res_info.steering_offset.plot(kind="bar")
 fig.suptitle("Calculated steerings by optimization", fontsize=16)
 
+# MERge
+res_info pd.concat(all_res)
+res_info = res_info.reset_index()
+res_info = res_info.rename_axis({"index":"idx"}, axis=1)
+
+# Wheel ration analysis
+ignore_wheel = [0, 1, 5, 6, 8, 13, 16, 17, 18, 19]
+wheel_steer_ratio_s = res_info[[x not in ignore_wheel for x in res_info["idx"]]].wheel_steer_ratio
+
+fig = plt.figure()
+wheel_steer_ratio_s.plot()
+
+wheel_steer_ratio_s.describe()
+# count    40.000000
+# mean     18.053225
+# std       0.812695
+# min      16.955807
+# 25%      17.350352
+# 50%      17.947226
+# 75%      18.581726
+# max      19.416291
+
 # Try different steering offsets
 from car_utils import get_rotation, get_car_can_path
 
 out_path = ""
-maybe_offsets = np.linspace(15.71921921921922 - 0.3, 15.71921921921922 + 0.3, 1000)
+maybe_offsets = np.linspace(14.555555555555555555 -0.7, 14.555555555555555555 + 0.7, 1000)
 nrows = 5
 ncols = 4
 
-out_folder = "/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/small_variation"
+out_folder = "/media/nemodrive3/Samsung_T5/nemodrive/optimized_steering_offset/small_variation_18_0"
 full_results = []
 
 for offset_sol in maybe_offsets:
@@ -357,6 +469,84 @@ losses.sort_values(ascending=True).head(10)
 
 
 # ==============================================================================================
+# Minimize loop closer
+WHEEL_STEER_RATIO = 18.050225
+OFFSET_STEERING = 15.45000001
+
+losses = []
+var_offset_steering = np.linspace(14.8000010000001, 15.9001000000001, 100)
+var_steer_ratio = np.linspace(17.9, 18.3, 100)
+
+# MULTI PROCESS
+from multiprocessing import Pool as ThreadPool
+import time
+
+def get_losses(args):
+    speed, steer, dataset_idx = args
+    losses = []
+    print(f"Start {dataset_idx}...")
+    for i, steer_ratio in enumerate(var_steer_ratio):
+        stp = time.time()
+        for offset_steering in var_offset_steering:
+
+            can_coord = get_car_can_path(speed.copy(), steer.copy(),
+                                         steering_offset=offset_steering, wheel_steer_ratio=steer_ratio)
+
+            loss = np.linalg.norm(can_coord.iloc[-1][["coord_x", "coord_y"]].values)
+            losses.append([loss, steer_ratio, offset_steering, dataset_idx])
+        print(f"Done {dataset_idx}: {i} ({time.time()-stp})!")
+    return losses
+
+threads = 9
+pool = ThreadPool(threads)
+args = []
+for idx, (phone_s, steer_s, speed_s) in enumerate(zip(phone_splits, steer_splits, speed_splits)):
+    phone, steer, speed = phone_s.copy(), steer_s.copy(), speed_s.copy()
+    args.append((speed, steer, idx))
+
+results = pool.map(get_losses, args)
+pool.close()
+pool.join()
+
+r = []
+for x in results:
+    r += x
+
+losses = pd.DataFrame(r, columns=["loss", "steer_ratio", "offset_steering", "dataset_idx"])
+
+# -- Iterative
+dataset_idx = 0
+
+
+for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
+    phone, steer, speed = phone_s.copy(), steer_s.copy(), speed_s.copy()
+    gps_unique_points = phone.groupby(['loc_tp']).head(1)
+
+    for steer_ratio in var_steer_ratio:
+        for offset_steering in var_offset_steering:
+
+            can_coord = get_car_can_path(speed.copy(), steer.copy(),
+                                         steering_offset=offset_steering, wheel_steer_ratio=steer_ratio)
+
+            loss = np.linalg.norm(can_coord.iloc[-1][["coord_x", "coord_y"]].values)
+            losses.append([loss, steer_ratio, offset_steering, dataset_idx])
+            # fig = plt.figure()
+            # plt.scatter(can_coord.coord_x, can_coord.coord_y, s=1.5, c="r", zorder=1)
+            # plt.axes().set_aspect('equal')
+            # plt.show()
+
+    dataset_idx += 1
+
+gps = gps_unique[gps_unique.tp < tp]
+fig = plt.figure()
+plt.plot(gps.easting - gps.easting.min(), gps.northing -
+         gps.northing.min(), zorder=-1)
+plt.scatter(gps.easting - gps.easting.min(), gps.northing -
+            gps.northing.min(), s=1.5, c="r", zorder=1)
+plt.show()
+plt.axes().set_aspect('equal')
+
+# ==============================================================================================
 # Plot GPS
 
 results = []
@@ -375,7 +565,7 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     k = input()
 
 
-
+#
 
 
 
