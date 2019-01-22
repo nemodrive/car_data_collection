@@ -20,7 +20,6 @@ STEER_FILE = "steer.csv"
 PHONE_FILE = "phone.log.pkl"
 
 
-
 def adjust_camera_cfg(cfg, start=None, end=None):
     new_cfg = copy.deepcopy(cfg)
 
@@ -94,11 +93,10 @@ def load_experiment_data(experiment_path):
 
 
 def main():
-    exp = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_1/1542549716_log"
+    exp = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
     steer = pd.read_csv("{}/steer.csv".format(exp))
     speed = pd.read_csv("{}/speed.csv".format(exp))
-    steer["can_steer"] = steer.steer
 
     offset_tp = 1543059543.52
 
