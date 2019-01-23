@@ -7,7 +7,7 @@ import glob
 import re
 import subprocess
 
-LOG_FOLDER = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log"
+LOG_FOLDER = "/media/andrei/Samsung_T51/nemodrive/18_nov/session_1/1542549716_log"
 CAN_FILE_PATH = os.path.join(LOG_FOLDER, "can_raw.log")
 OBD_SPEED_FILE = LOG_FOLDER + "obd_SPEED.log"
 CAMERA_FILE_PREFIX = os.path.join(LOG_FOLDER, "camera_*")
@@ -74,7 +74,7 @@ df_can = read_can_file(CAN_FILE_PATH)
 # =======================================================================
 # -- Load speed command
 cmd_name, data_name, can_id = CMD_NAMES["speed"]
-df_can_speed = df_can[df_can["can_id"] == can_id]
+df_can_speed = df_can[df_can["can_id"] == can_id].copy()
 df_can_speed["speed"] = df_can_speed["data_str"].apply(lambda x: get_can_data(db, cmd_name,
                                                                               data_name, x))
 
@@ -84,7 +84,8 @@ df_can_speed["mps"] = df_can_speed.speed * 1000 / 3600.
 speed_file = os.path.join(LOG_FOLDER, "speed.csv")
 df_can_speed.to_csv(speed_file, float_format='%.6f')
 
-plt.plot(df_can_speed["tp"].values, df_can_speed["speed"])
+fig = plt.figure()
+plt.plot(df_can_speed["tp"].values- df_can_speed["tp"].values.min(), df_can_speed["speed"])
 plt.show()
 
 # =======================================================================
@@ -93,7 +94,7 @@ from car_utils import OFFSET_STEERING
 
 cmd_name, data_name, can_id = CMD_NAMES["steer"]
 
-df_can_steer = df_can[df_can["can_id"] == can_id]
+df_can_steer = df_can[df_can["can_id"] == can_id].copy()
 df_can_steer["steer"] = df_can_steer["data_str"].apply(lambda x: get_can_data(db, cmd_name,
                                                                               data_name, x))
 
@@ -106,6 +107,7 @@ steer_file = os.path.join(LOG_FOLDER, "steer.csv")
 df_can_steer.to_csv(steer_file, float_format='%.6f')
 
 # --Plot can data
+fig = plt.figure()
 plt.plot(df_can_steer["tp"].values, df_can_steer["steer"])
 plt.show()
 
@@ -151,7 +153,7 @@ for camera_log in camera_logs_path:
 video_start_pts = np.array(video_start_pts)
 
 # Approximate which is the first frame where the car moves
-video_frame_move = np.array([1444, 1411, 1438])
+video_frame_move = np.array([1462, 1450, 1478])
 
 # Extract pts of frame
 pts_df = [
@@ -219,7 +221,7 @@ df_tp = pd.DataFrame(intervals,
                   columns=["min", "max"])
 
 for idx, row in df_tp.iterrows():
-    print("{}_min_max_tp: [{}, {}]".format(idx, row["min"], row["max"]))
+    print("{}_min_max_tp: [{:.6f}, {:.6f}]".format(idx, row["min"], row["max"]))
 
 # ==================================================================================================
 # -- Video others (random stuff)
