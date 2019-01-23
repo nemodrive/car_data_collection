@@ -514,7 +514,42 @@ r = []
 for x in results:
     r += x
 
+from mpl_toolkits.mplot3d import Axes3D
+
 losses = pd.DataFrame(r, columns=["loss", "steer_ratio", "offset_steering", "dataset_idx"])
+
+# Plot all datasets
+fig = plt.figure()
+for idx in range(len(phone_splits)):
+    df = losses[losses.dataset_idx == idx]
+    ax = fig.add_subplot(3, 3, idx+1, projection='3d')
+    ax.scatter(df.steer_ratio, df.offset_steering, df.loss, s=1.)
+fig.suptitle("Grid search steer offset and ratio for loops")
+
+# Plot minimum loss coord
+for idx, (phone_s, steer_s, speed_s) in enumerate(zip(phone_splits, steer_splits, speed_splits)):
+    phone, steer, speed = phone_s.copy(), steer_s.copy(), speed_s.copy()
+    gps_unique_points = phone.groupby(['loc_tp']).head(1)
+
+    df = losses[losses.dataset_idx == idx]
+
+    can_coord = get_car_can_path(speed.copy(), steer.copy(),
+                                 steering_offset=offset_steering, wheel_steer_ratio=steer_ratio)
+
+    loss = np.linalg.norm(can_coord.iloc[-1][["coord_x", "coord_y"]].values)
+    losses.append([loss, steer_ratio, offset_steering, dataset_idx])
+
+    fig = plt.figure()
+    plt.scatter(can_coord.coord_x, can_coord.coord_y, s=1.5, c="r", zorder=1)
+    plt.axes().set_aspect('equal')
+    plt.show()
+
+    dataset_idx += 1
+
+all_data_loss = losses.groupby(["steer_ratio", "offset_steering"])["loss"].sum()
+fig = plt.figure()
+ax = fig.add_subplot(3, 3, idx + 1, projection='3d')
+ax.scatter(df.steer_ratio, df.offset_steering, df.loss, s=1.)
 
 # -- Iterative
 dataset_idx = 0
