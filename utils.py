@@ -3,6 +3,7 @@ import yaml
 import numpy as np
 import pandas as pd
 
+
 def get_closest_index(df, timestamp):
     idx = df.index.get_loc(timestamp, method="nearest")
     data_point = df.iloc[idx]
@@ -66,13 +67,34 @@ def merge_intervals(intervals):
     """ Merge intervals from a list of list of [min, max] intervals """
     s = sorted(intervals, key=lambda t: t[0])
     m = 0
+    print(intervals)
     for t in s:
         if t[0] > s[m][1]:
             m += 1
             s[m] = t
         else:
-            s[m] = (s[m][0], t[1])
+            s[m] = [s[m][0], t[1]]
     return s[:m+1]
+
+
+def exclude_intervals(intervals, exclude):
+    """ Exclude intervals from list of intervals """
+    intervals = merge_intervals(intervals)
+    exclude = merge_intervals(exclude)
+    for e_start, e_end in exclude:
+        valid_intervals = []
+        for start, end in intervals:
+            if start < e_start < end:
+                valid_intervals.append([start, e_start])
+                if e_end < end:
+                    valid_intervals.append([e_end, end])
+            elif start < e_end < end:
+                valid_intervals.append([e_end, end])
+            elif e_end <= start or e_start >= end:
+                valid_intervals.append([start, end])
+        intervals = merge_intervals(valid_intervals)
+
+    return intervals
 
 
 def get_interval_cnt(df, interval, clm="tp", min_hz=5):

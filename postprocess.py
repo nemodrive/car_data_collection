@@ -1,3 +1,4 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import cantools
 import pandas as pd
@@ -6,6 +7,8 @@ import os
 import glob
 import re
 import subprocess
+
+matplotlib.rcParams['figure.figsize'] = (18.55, 9.86)
 
 LOG_FOLDER = "/media/nemodrive0/Samsung_T5/nemodrive/15_nov/1542296320_log"
 CAN_FILE_PATH = os.path.join(LOG_FOLDER, "can_raw.log")
@@ -74,7 +77,7 @@ df_can = read_can_file(CAN_FILE_PATH)
 # =======================================================================
 # -- Load speed command
 cmd_name, data_name, can_id = CMD_NAMES["speed"]
-df_can_speed = df_can[df_can["can_id"] == can_id]
+df_can_speed = df_can[df_can["can_id"] == can_id].copy()
 df_can_speed["speed"] = df_can_speed["data_str"].apply(lambda x: get_can_data(db, cmd_name,
                                                                               data_name, x))
 
@@ -84,8 +87,11 @@ df_can_speed["mps"] = df_can_speed.speed * 1000 / 3600.
 speed_file = os.path.join(LOG_FOLDER, "speed.csv")
 df_can_speed.to_csv(speed_file, float_format='%.6f')
 
-plt.plot(df_can_speed["tp"].values, df_can_speed["speed"])
+fig = plt.figure()
+plt.plot(df_can_speed["tp"].values - df_can_speed["tp"].values.min(), df_can_speed["mps"])
+plt.title("MPS")
 plt.show()
+fig.savefig(f"{LOG_FOLDER}/data_info/speed_plot.png")
 
 # =======================================================================
 # -- Load steer command
@@ -93,7 +99,7 @@ from car_utils import OFFSET_STEERING
 
 cmd_name, data_name, can_id = CMD_NAMES["steer"]
 
-df_can_steer = df_can[df_can["can_id"] == can_id]
+df_can_steer = df_can[df_can["can_id"] == can_id].copy()
 df_can_steer["steer"] = df_can_steer["data_str"].apply(lambda x: get_can_data(db, cmd_name,
                                                                               data_name, x))
 
@@ -106,8 +112,12 @@ steer_file = os.path.join(LOG_FOLDER, "steer.csv")
 df_can_steer.to_csv(steer_file, float_format='%.6f')
 
 # --Plot can data
+fig = plt.figure()
 plt.plot(df_can_steer["tp"].values, df_can_steer["steer"])
 plt.show()
+plt.title(f"Steering_with_offset{OFFSET_STEERING}")
+plt.show()
+fig.savefig(f"{LOG_FOLDER}/data_info/steer_plot.png")
 
 
 # =======================================================================
@@ -137,28 +147,40 @@ merged_data.to_pickle(phone_log_path + ".pkl")
 # -- Sync video movement # video setup
 
 video_start_pts = []
+video_fps = []
 for camera_log in camera_logs_path:
 
+    m = []
+    fps = []
     with open(camera_log, 'r') as f:
         while True:
             line = f.readline()
-            m = re.findall("Duration: N\/A, start: (.*), bitrate: N\/A", line)
-            if len(m) > 0:
+            if len(m) <= 0:
+                m = re.findall("Duration: N\/A, start: (.*), bitrate: N\/A", line)
+            if len(fps) <= 0:
+                fps = re.findall("kb/s, (.*) fps,", line)
+            if len(m) > 0 and len(fps) > 0:
                 break
         vsp = float(m[0])
+        fps = float(fps[0])
 
         video_start_pts.append(vsp)
-video_start_pts = np.array(video_start_pts)
+        video_fps.append(fps)
 
+video_start_pts = np.array(video_start_pts)
+video_fps = np.array(video_fps)
+# video_start_pts -= video_start_pts.min()
 # Approximate which is the first frame where the car moves
+# TODO frames are actually calculated at movie fps -because of fuck you "melt" app
 video_frame_move = np.array([9597, 9572, 9637])
 
-# Extract pts of frame
-pts_df = [
-    pd.read_csv(os.path.join(vid_dir, vid_name + "_pts.log"), header=None)
-    for vid_dir, vid_name in zip(vid_dirs, vid_names)]
+# # Extract pts of frame
+# pts_df = [
+#     pd.read_csv(os.path.join(vid_dir, vid_name + "_pts.log"), header=None)
+#     for vid_dir, vid_name in zip(vid_dirs, vid_names)]
+# video_frame_move_pts = np.array([j.loc[i, 0] for i, j in zip(video_frame_move, pts_df)])
 
-video_frame_move_pts = np.array([j.loc[i, 0] for i, j in zip(video_frame_move, pts_df)])
+video_frame_move_pts = video_frame_move * (1./ video_fps)
 
 video_pts_start_move = (video_start_pts + video_frame_move_pts).mean()
 print("Deviation: {}".format(video_pts_start_move - (video_start_pts + video_frame_move_pts)))
@@ -203,11 +225,6 @@ min_max_phone = [get_tp_line(phone_lines[0]), get_tp_line(phone_lines[-1])]
 
 intervals = np.array([min_max_can] + min_max_cameras + [min_max_phone])
 
-# Plot
-for i in range(len(intervals)):
-    plt.plot(intervals[i], [i, i])
-
-plt.show()
 
 # Extract min start
 recorded_min_max = [intervals.min(), intervals.max()]
@@ -219,7 +236,20 @@ df_tp = pd.DataFrame(intervals,
                   columns=["min", "max"])
 
 for idx, row in df_tp.iterrows():
-    print("{}_min_max_tp: [{}, {}]".format(idx, row["min"], row["max"]))
+    print("{}_min_max_tp: [{:.6f}, {:.6f}]".format(idx, row["min"], row["max"]))
+
+# Plot
+fig, ax = plt.subplots()
+for i in range(len(intervals)):
+    ax.plot(intervals[i], [i, i])
+
+ax.set_yticks(range(len(intervals)))
+ax.set_yticklabels(df_tp.index.tolist())
+plt.title("Timestamps")
+plt.show()
+# --Plot can data
+fig.savefig(f"{LOG_FOLDER}/data_info/data_timestamps.png")
+
 
 # ==================================================================================================
 # -- Video others (random stuff)
