@@ -93,7 +93,7 @@ def load_experiment_data(experiment_path):
 
 
 def main():
-    exp = "/media/nemodrive3/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
+    exp = "/media/andrei/CE04D7C504D7AF291/downloads/18_nov_session_1"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
     steer = pd.read_csv("{}/steer.csv".format(exp))
     speed = pd.read_csv("{}/speed.csv".format(exp))
@@ -309,6 +309,7 @@ pool.join()
 
 # ==============================================================================================
 # Iterative version
+
 results = []
 # i = 3
 # phone_s, steer_s, speed_s = phone_splits[3], steer_splits[3], speed_splits[3]
@@ -581,7 +582,7 @@ plt.scatter(gps.easting - gps.easting.min(), gps.northing -
 plt.show()
 plt.axes().set_aspect('equal')
 
-# ==============================================================================================
+# ==================================================================================================
 # Plot GPS
 
 results = []
@@ -600,7 +601,12 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     k = input()
 
 
-#
+# ==================================================================================================
+# -- Try to correct path
+
+
+
+
 
 
 
