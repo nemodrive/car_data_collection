@@ -320,30 +320,18 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     df_coord.loc[:, "datetime"] = df_coord.tp.apply(datetime.fromtimestamp).values
     df_coord = df_coord.set_index("datetime")
 
-    # gps_unique = gps_data[
-    #     (gps_data.tp >= df_coord.tp.min()) & (gps_data.tp <= df_coord.tp.max())
-    # ].groupby(['loc_tp']).head(1)
     gps_unique = gps_unique_points
     gps_unique["datetime"] = gps_unique.tp.apply(datetime.fromtimestamp)
     gps_unique = gps_unique.set_index("datetime")
 
     nearest_car_pos = df_coord.reindex(gps_unique.index, method='nearest')
 
-    # Filter out time interval
-    # max_tp = gps_unique.tp.min() + 300.
-    #
-    # gps_unique = gps_unique[gps_unique.tp < max_tp]
-    # nearest_car_pos = nearest_car_pos[nearest_car_pos.tp < max_tp]
     gps_unique.loc[:, "target_x"] = gps_unique.easting - gps_unique.iloc[0].easting
     gps_unique.loc[:, "target_y"] = gps_unique.northing - gps_unique.iloc[0].northing
 
     merge_info = gps_unique.merge(nearest_car_pos, how="outer", left_index=True, right_index=True)
 
     coord = merge_info[["coord_x", "coord_y"]].values
-
-    # coord = merge_info[["move_x", "move_y"]].values
-    # coord = np.cumsum(coord, axis=0)
-
     target = merge_info[["target_x", "target_y"]].values
 
     def fit_2d_curve(params):
@@ -367,20 +355,14 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     # -------------
     initial_guess = [guess_orientation, guess_offest_x, guess_offest_y]
 
-    result = optimize.minimize(fit_2d_curve, initial_guess )
+    if simple:
+        result = optimize.minimize(fit_2d_curve, initial_guess)
+    else:
+        result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=tol,
+                                   options={'maxiter': maxiter, "fatol": fatol})
+
     loss = fit_2d_curve(result["x"])
     result["loss"] = loss
-
-    # result = optimize.minimize(fit_2d_curve, initial_guess, method='BFGS', tol=1e-15,
-    #                            options={'gtol': 1e-05, 'norm': np.inf, 'eps': 1.4901161193847656e-14, 'maxiter': 4000})
-    # loss = fit_2d_curve(result["x"])
-    # print(loss)
-    #
-    # result = optimize.minimize(fit_2d_curve, initial_guess, method='Nelder-Mead', tol=1e-15,
-    #                            options={'maxiter': 4000, "fatol": 1e-15})
-    # loss = fit_2d_curve(result["x"])
-    # print(loss)
-
 
     all_coord = df_coord[["move_x", "move_y"]].values
     all_coord = np.cumsum(all_coord, axis=0)
@@ -388,20 +370,6 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     new_points = get_points_rotated(all_coord, *result.x)
     new_points = pd.DataFrame(np.column_stack([new_points, df_coord.tp.values]),
                               columns=["coord_x", "coord_y", "tp"])
-    #
-    # fig = plt.figure()
-    # plt.scatter(target[:, 0], target[:, 1], s=1.)
-    # plt.axes().set_aspect('equal')
-    #
-    # # -------------
-    #
-    # fig = plt.figure()
-    # plt.scatter(nearest_car_pos.move_x, nearest_car_pos.move_y, s=1.)
-    # plt.axes().set_aspect('equal')
-    #
-    # fig = plt.figure()
-    # plt.scatter(gps_unique.easting, gps_unique.northing, s=1.)
-    # plt.axes().set_aspect('equal')
 
     return new_points, gps_unique, result
 

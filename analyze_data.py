@@ -16,10 +16,6 @@ STEER_FILE = "steer.csv"
 PHONE_FILE = "phone.log.pkl"
 
 
-
-
-
-
 def main():
     exp = "/media/nemodrive0/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
@@ -28,13 +24,6 @@ def main():
 
     offset_tp = 1543059543.52
 
-    max_tp = df.loc[26800].tp
-    df = df[df.tp < max_tp]
-    speed = speed[speed.tp < max_tp]
-    steer = steer[steer.tp < max_tp]
-
-    with open("/media/andrei/Samsung_T51/nemodrive/18_nov/session_0/1542537659_log/segments/good/a417768c24bc483c.json") as f:
-        info = json.load(f)
 # ==================================================================================================
 # Plot gps
 
@@ -440,8 +429,9 @@ from car_utils import get_rotation_and_steering_offset
 from multiprocessing import Pool as ThreadPool
 
 all_res = []
+no = 0
 
-no+=1
+no += 1
 
 def get_rotation_and_steering_offset_mt(args):
     speed, steer, gps_unique_points, task = args
@@ -465,6 +455,7 @@ pool.join()
 
 # ==============================================================================================
 # Iterative version
+
 results = []
 # i = 3
 # phone_s, steer_s, speed_s = phone_splits[3], steer_splits[3], speed_splits[3]
@@ -532,7 +523,7 @@ res_info.steering_offset.plot(kind="bar")
 fig.suptitle("Calculated steerings by optimization", fontsize=16)
 
 # MERge
-res_info pd.concat(all_res)
+res_info = pd.concat(all_res)
 res_info = res_info.reset_index()
 res_info = res_info.rename_axis({"index":"idx"}, axis=1)
 
@@ -701,8 +692,6 @@ selection = selection.loc[min_loss]
 
 min_steer_ratio = selection[selection.steer_ratio > 18.0].steer_ratio.mean()
 
-matplotlib.rcParams['figure.figsize'] = (18.55, 9.86)
-
 min_off_s  = var_offset_steering[1]
 min_s_r = min_steer_ratio
 """
@@ -765,6 +754,8 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
 
     dataset_idx += 1
 
+tp = 0.
+
 gps = gps_unique[gps_unique.tp < tp]
 fig = plt.figure()
 plt.plot(gps.easting - gps.easting.min(), gps.northing -
@@ -793,7 +784,6 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     k = input()
 
 
-#
 
 
 
