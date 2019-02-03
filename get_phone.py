@@ -26,6 +26,7 @@ def new_client(client, server):
 
 def client_diconnected(client, server):
     """Called for every client disconnecting"""
+    plog("Time {:.6f}".format(time.time()))
     plog("Client(%d) disconnected" % client['id'])
 
 
