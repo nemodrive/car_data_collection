@@ -8,9 +8,11 @@ import glob
 import re
 import subprocess
 
+from utils import parse_video_time_format
+
 matplotlib.rcParams['figure.figsize'] = (18.55, 9.86)
 
-LOG_FOLDER = "/media/nemodrive0/Samsung_T5/nemodrive/15_nov/1542296320_log"
+LOG_FOLDER = "/media/nemodrive0/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log"
 CAN_FILE_PATH = os.path.join(LOG_FOLDER, "can_raw.log")
 OBD_SPEED_FILE = LOG_FOLDER + "obd_SPEED.log"
 CAMERA_FILE_PREFIX = os.path.join(LOG_FOLDER, "camera_*")
@@ -169,10 +171,43 @@ for camera_log in camera_logs_path:
 
 video_start_pts = np.array(video_start_pts)
 video_fps = np.array(video_fps)
+
+# -- Sync with bumpers
+import json
+with open(LOG_FOLDER + "/bumpers.json") as f:
+    bumpers = json.load(f)
+
+tps = bumpers["tp"]
+ref_camera = bumpers["reference_time"]
+idx_camera = vid_names.index(ref_camera)
+
+sync_tps = [[parse_video_time_format(x[0][0]), parse_video_time_format(x[0][1]), x[1][0], x[1][1]] for x in  tps]
+sync_tps = np.array(sync_tps)
+# camera_tps - phone_tps
+offsets_camera = np.concatenate([sync_tps[:, 0] - sync_tps[:, 2], sync_tps[:, 1] - sync_tps[:, 3]])
+mean_offset = offsets_camera.mean()
+
+print((offsets_camera - offsets_camera.mean()).reshape(-1, 2))
+print(f"Offset camera_time vs phone_time: {offsets_camera.mean()} _ std: {offsets_camera.std()}")
+
+phone = pd.read_pickle(f"{LOG_FOLDER}/phone.log.pkl")
+phone_start_tp = phone.tp.min()
+
+video_start_offsets = video_start_pts - video_start_pts[idx_camera]
+video_start_tps = phone_start_tp + video_start_offsets - mean_offset
+
+for video_start_tp, camera_name in zip(video_start_tps, cameras):
+    with open(camera_name + "_timestamp", "w") as f:
+        f.write("{:.6f}".format(video_start_tp))
+
+"""
+# -- OLD METHOD using speed - too much delayed
+
 # video_start_pts -= video_start_pts.min()
+
 # Approximate which is the first frame where the car moves
 # TODO frames are actually calculated at movie fps -because of fuck you "melt" app
-video_frame_move = np.array([9597, 9572, 9637])
+video_frame_move = np.array([1435, 1401, 1418])
 
 # # Extract pts of frame
 # pts_df = [
@@ -192,6 +227,7 @@ video_start_tps = video_start_pts - video_pts_start_move + can_first_move_tp
 for video_start_tp, camera_name in zip(video_start_tps, cameras):
     with open(camera_name + "_timestamp", "w") as f:
         f.write(str(video_start_tp))
+"""
 
 # ==================================================================================================
 # Get info about recorded intervals timpestamps
