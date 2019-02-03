@@ -87,6 +87,7 @@ def validate_data(experiment_path):
     fig = plt.figure()
     plt.plot(phone_log_hz)
     fig.suptitle("Phone log Hz within a {}s interval".format(FREQ_INTERVAL))
+    print("nu inteleg de unde")
     print(pd.Series(phone_log_hz, name="phone_log_hz").describe())
     print("\n")
     print("Intervals with Hz < {}".format(MIN_HZ))
@@ -98,9 +99,10 @@ def validate_data(experiment_path):
     plt.show()
     plt.pause(0.0000001)  # Note this correction
 
+    gps = df.groupby(['loc_tp']).head(1)
+
     print("GPS_INFO")
-    print("________ All:", len(gps))
-    print("________ unique", len(gps["global"].unique()))
+    print("________ No. unique", len(gps["global"].unique()))
 
     fig = plt.figure()
     plt.scatter(gps["easting"].values, gps["northing"].values, s=3.5, )
@@ -163,7 +165,7 @@ class ScatterLivePlot:
         min_data, max_data = self.min_data, self.max_data
         min_tp = self.min_tp
 
-        start_tp = max(plot_tp - tp_window_size//2, min_tp)
+        start_tp = max(plot_tp - tp_window_size // 2, min_tp)
         end_tp = start_tp + tp_window_size
 
         if start_tp < tp.iloc[start_idx]:
@@ -189,8 +191,9 @@ class ScatterLivePlot:
 
         crt_plt_tp = plot_tp - min_tp
         crt_plt_idx = 0
-        while crt_plt_tp > plot_t[crt_plt_idx]:
-            crt_plt_idx += 1
+        if crt_plt_idx < len(plot_t):
+            while crt_plt_tp > plot_t[crt_plt_idx] and crt_plt_idx < len(plot_t) - 1:
+                crt_plt_idx += 1
 
         plot_d = data.iloc[start_idx:end_idx].values
         if len(plot_d) > 0:
@@ -283,6 +286,7 @@ def get_attitude(df):
     Diff: 0.909038782119751
     Diff: 0.4892098903656006
 
+
 def gather_all_phone_logs():
     import glob2
 
@@ -364,7 +368,6 @@ class PhonePlot:
         # Plot GPS
         gps = df[["tp", "easting", "northing", "latitude", "longitude", "global"]]
         self.gps = gps
-
 
         self.plotters = []
 

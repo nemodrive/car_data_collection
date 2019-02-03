@@ -1,10 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import read_cfg
-import os
-from argparse import Namespace
 import numpy as np
-import copy
 
 from phone_data_utils import UPB_XLIM_EASTING, UPB_YLIM_NORTHING
 
@@ -20,80 +16,12 @@ STEER_FILE = "steer.csv"
 PHONE_FILE = "phone.log.pkl"
 
 
-def adjust_camera_cfg(cfg, start=None, end=None):
-    new_cfg = copy.deepcopy(cfg)
-
-    # Most of them can be ignored
-    delattr(new_cfg, "cfg")
-
-    # Cut pts
-    # Does not work :(
-    # pts = np.array(new_cfg.pts)
-    # pts_start = (pts >= start).argmax()
-    # pts_end = (pts <= end).argmin()
-    # new_cfg.pts = pts[pts_start:pts_end].tolist()
-    #
-    # Adjust extrinsic calibration
-    extra_cfgs = new_cfg.cfg_extra
-    if len(extra_cfgs) == 1:
-        new_cfg.cfg_extra = extra_cfgs[0]
-    else:
-        for extra_cfg in extra_cfgs:
-            valid_interval = getattr(extra_cfg, "valid_interval", [0, 0])
-            if valid_interval[0] <= start and valid_interval[1] >= end:
-                new_cfg.cfg_extra = extra_cfg
-                break
-
-    return new_cfg
 
 
-def load_experiment_data(experiment_path):
-    d = Namespace()
-
-    # Read experiment CFG
-    d.cfg = read_cfg(os.path.join(experiment_path, CFG_FILE))
-    d.collect = d.cfg.collect
-    d.record_timestamp = d.cfg.recorded_min_max_tp
-    d.common_min_max_tp = d.cfg.common_min_max_tp
-
-    # Read Phone data
-    d.phone_log_path = os.path.join(experiment_path, PHONE_FILE)
-    d.phone = pd.read_pickle(d.phone_log_path) if os.path.isfile(d.phone_log_path) else None
-
-    # Read Can data
-    d.steer_log_path = os.path.join(experiment_path, STEER_FILE)
-    d.steer = pd.read_csv(d.steer_log_path) if os.path.isfile(d.steer_log_path) else None
-
-    d.speed_log_path = os.path.join(experiment_path, SPEED_FILE)
-    d.speed = pd.read_csv(d.speed_log_path) if os.path.isfile(d.speed_log_path) else None
-
-    d.cfg_extra = read_cfg(os.path.join(experiment_path, CFG_EXTRA_FILE))
-
-    # Read camera stuff
-    d.cameras = []
-    for camera in ["camera_{}".format(x) for x in d.cfg.camera.ids]:
-        c = Namespace()
-        c.name = camera
-        c.video_path = os.path.join(experiment_path, "{}.mkv".format(camera))
-        c.cfg = getattr(d.cfg.camera, camera)
-
-        cfg_extras = [k for k in d.cfg_extra.__dict__.keys() if camera in k]
-        c.cfg_extra = [getattr(d.cfg_extra, x) for x in cfg_extras]
-        with open(os.path.join(experiment_path, f"{camera}_timestamp"), "r") as f:
-            c.start_timestamp = float(f.read())
-
-        c.pts = pd.read_csv(os.path.join(experiment_path, "{}_pts.log".format(camera)), header=None)
-        c.pts.sort_index(inplace=True, ascending=True)
-        c.pts = c.pts[0].values.tolist()
-        d.cameras.append(c)
-
-        # TODO Add camera start move frame
-
-    return d
 
 
 def main():
-    exp = "/media/nemodrive3/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
+    exp = "/media/nemodrive0/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
     steer = pd.read_csv("{}/steer.csv".format(exp))
     speed = pd.read_csv("{}/speed.csv".format(exp))
@@ -137,10 +65,93 @@ def main():
     fig = plt.figure()
     plt.plot(steer.tp - offset_tp, steer.steer)
 
+# ==================================================================================================
+#  Plot Accelerometer
+
+    acc = pd.DataFrame.from_dict(list(phone["acceleration"].values))
+    acc["tp"] = phone["tp"]
+    phone_start_tp = acc.tp.min()
+    acc["tp_rel"] = acc.tp - phone_start_tp
+    # acc["tp_rel"] = acc.tp - camer_start_time
+
+    tp_start = 11*60+ 45. + 1542296336.71 - 30.
+    acc_sel = acc[(acc.tp >= tp_start) & (acc.tp < tp_start + 30.)]
+
+    fig, ax = plt.subplots(1, 3)
+    ax[0].plot(acc_sel.tp_rel, acc_sel.x)
+    ax[1].plot(acc_sel.tp_rel, acc_sel.y)
+    ax[2].plot(acc_sel.tp_rel, acc_sel.z)
+
+    fig, ax = plt.subplots()
+    ax.plot(acc.tp_rel, acc.z)
+    ax.set_title("acc_z")
+
+    fig, ax = plt.subplots()
+    ax.plot(acc.tp_rel, acc.y)
+    ax.set_title("acc_y")
+
+    fig, ax = plt.subplots()
+    ax.plot(acc.tp_rel, acc.x)
+    ax.set_title("acc_x")
+
+
+    speed["tp_rel"] = speed.tp - phone_start_tp
+    fig, ax = plt.subplots()
+    ax.plot(speed.tp_rel, speed.mps)
+    ax.set_title("speed")
+# ==================================================================================================
+#  Plot Accelerometer
+
+    userAcceleration = pd.DataFrame.from_dict(list(phone["userAcceleration"].values))
+    userAcceleration["tp"] = phone["tp"]
+    phone_start_tp = acc.tp.min()
+    userAcceleration["tp_rel"] = userAcceleration.tp - phone_start_tp
+
+    tp_start = 11*60+ 45. + 1542296336.71 - 30.
+    acc_sel = acc[(acc.tp >= tp_start) & (acc.tp < tp_start + 30.)]
+
+
+    fig, ax = plt.subplots()
+    ax.plot(userAcceleration.tp_rel, userAcceleration.z)
+
+# ==================================================================================================
+#  Plot Accelerometer
+
+    gravity = pd.DataFrame.from_dict(list(phone["gravity"].values))
+    gravity["tp"] = phone["tp"]
+    phone_start_tp = acc.tp.min()
+    gravity["tp_rel"] = gravity.tp - phone_start_tp
+
+
+
+    fig, ax = plt.subplots()
+    ax.plot(gravity.tp_rel, gravity.z)
+    ax.set_title("gravity")
+
+# ==================================================================================================
+#  Plot attiude
+    attiude = pd.DataFrame.from_dict(list(phone["attitudeEularAngles"].values))
+    attiude["tp"] = phone["tp"]
+    phone_start_tp = phone.tp.min()
+    attiude["tp_rel"] = attiude.tp - phone_start_tp
+
+    camera_2_start = 1542296336.71
+    tp_start = 450 + camera_2_start
+
+    attiude_sel = attiude[(attiude.tp >= tp_start) & (attiude.tp < tp_start + 300.)]
+
+    fig, ax = plt.subplots(1, 3)
+    ax[0].plot(attiude_sel.tp_rel, attiude_sel.x)
+    ax[1].plot(attiude_sel.tp_rel, attiude_sel.y)
+    ax[2].plot(attiude_sel.tp_rel, attiude_sel.z)
+
+    fig, ax = plt.subplots()
+    ax.plot(attiude.tp_rel, np.cumsum(attiude.y.values))
+
 
 # ==================================================================================================
 #  Interesting data segments
-base_exp_path = "/media/nemodrive3/Samsung_T5/nemodrive"
+base_exp_path = "/media/nemodrive0/Samsung_T5/nemodrive"
 
 DATA = [
     {
@@ -212,7 +223,9 @@ LOOPS = [
         "exp_path": f"{base_exp_path}/18_nov/session_0/1542537659_log",
         "reference_time":"camera_2_timestamp",
         "tp": [
-            ["00:00.0", "10:46.12"],
+            # ["00:00.0", "10:46.12"], # 2 loops
+            ["02:43.18", "06:47.10"],
+            ["06:36.02", "10:31.19"],
             ["11:17.26", "15:00.9"],
             ["14:58.1", "18:29.26"],
         ]
@@ -237,7 +250,100 @@ LOOPS = [
     }
 ]
 
-def parse_time_format(s, fps=30.):
+STRAIGHT_LINE = [
+    {
+        "exp_path": f"{base_exp_path}/15_nov/1542296320_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["22:21.27", "22:50.08"],
+            ["23:37.24", "23:43.17"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/18_nov/session_0/1542537659_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["06:09.24", "06:38.23"],
+            ["08:33.14", "08:45.19"],
+            ["10:07.20", "10:30.26"],
+            ["11:20.30", "11:48.25"],
+            ["15:00.11", "15:24.20"],
+            ["20:59.11", "20:14.03"],
+            ["21:38.13", "21:57.29"],
+            ["22:16.11", "22:32.20"],
+            ["23:07.21", "23:19.21"],
+            ["23:46.08", "24:01.14"],
+            ["24:22.23", "24:29.09"],
+            ["24:44.06", "24:59.12"],
+            ["26:26.18", "26:40.25"],
+            ["30:52.01", "31:10.23"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/18_nov/session_1/1542549716_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["03:09.09", "03:17.29"],
+            ["04:28.06", "04:48.20"],
+            ["05:41.29", "06:10.13"],
+            ["07:28.25", "07:36.11"],
+            ["12:03.07", "12:20.06"],
+            ["12:38.23", "12:48.20"],
+            ["13:02.27", "13:07.12"],
+            ["13:20.25", "13:38.13"],
+            ["14:33.05", "14:38.08"],
+            ["16:05.14", "16:16.20"],
+            ["16:33.05", "16:43.12"],
+            ["17:52.06", "18:08.11"],
+            ["18:53.14", "19:03.07"],
+            ["21:00.25", "22:03.26"],
+            ["23:14.13", "23:30.3"],
+            ["23:57.5", "24:06.27"],
+            ["24:21.24", "24:37.29"],
+            ["27:23.21", "27:49.29"],
+            ["30:50.16", "31:02.18"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/24_nov/session0/1543059528_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["02:10.13", "02:45.25"],
+            ["11:44.4", "12:01.01"],
+            ["15:20.13", "15:31.19"],
+            ["18:56.28", "19:15.01"],
+            ["19:42.13", "19:56.22"],
+            ["20:32.16", "20:43.01"],
+            ["22:05.25", "22:16.04"],
+            ["22:05.25", "22:16.04"],
+        ]
+    },
+    {
+        "exp_path": f"{base_exp_path}/25_nov/session_0/1543134132_log",
+        "reference_time":"camera_2_timestamp",
+        "tp": [
+            ["03:10.13", "03:17.10"],
+            ["03:29.25", "03:41.07"],
+            ["05:03.25", "05:18.01"],
+            ["06:11.13", "06:37.07"],
+            ["10:14.22", "10:43.25"],
+            ["12:10.07", "12:26.04"],
+            ["12:50.28", "13:08.04"],
+            ["14:38.25", "14:46.25"],
+            ["17:08.10", "17:18.01"],
+            ["17:30.22", "17:45.25"],
+            ["18:50.19", "19:01.25"],
+            ["19:10.4", "19:20.22"],
+            ["21:58.4", "22:10.01"],
+            ["22:30.19", "22:40.13"],
+            ["23:37.19", "23:52.28"],
+            ["24:05.28", "24:20.28"],
+        ]
+    },
+]
+
+
+def parse_video_time_format(s, fps=30.):
     """ Format MM:SS.f """
     m, sf = s.split(":")
     m = float(m)
@@ -246,11 +352,20 @@ def parse_time_format(s, fps=30.):
     time_interval = m * 60. + s + 1. /fps * f
     return time_interval
 
+
+# # SHOULD use margins for save cut FOR STRAIGHT LINE
+# margin_right = 1.0
+# margin_left = 1.
+
+# # SHOULD use margins for save cut
+margin_right = 0.0
+margin_left = 0.0
+
 phone_splits = []
 steer_splits = []
 speed_splits = []
 
-for data_dict in LOOPS:
+for data_dict in LOOPS:  # STRAIG
     experiment_path = data_dict["exp_path"]
 
     phone = pd.read_pickle("{}/phone.log.pkl".format(experiment_path))
@@ -265,17 +380,58 @@ for data_dict in LOOPS:
     gps_unique = phone.groupby(['loc_tp']).head(1)
 
     for i, j in time_intervals:
-        tp_start = parse_time_format(i) + camera_start_tp
-        tp_end = parse_time_format(j) + camera_start_tp
+        tp_start = parse_video_time_format(i) + camera_start_tp
+        tp_end = parse_video_time_format(j) + camera_start_tp
 
-        phone_split = phone[(phone.tp >= tp_start) & (phone.tp < tp_end)]
-        steer_split = steer[(steer.tp >= tp_start) & (steer.tp < tp_end)]
-        speed_split = speed[(speed.tp >= tp_start) & (speed.tp < tp_end)]
+        phone_split = phone[(phone.tp >= tp_start + margin_left) & (phone.tp < tp_end - margin_right)]
+        steer_split = steer[(steer.tp >= tp_start + margin_left) & (steer.tp < tp_end - margin_right)]
+        speed_split = speed[(speed.tp >= tp_start + margin_left) & (speed.tp < tp_end - margin_right)]
 
         phone_splits.append(phone_split)
         steer_splits.append(steer_split)
         speed_splits.append(speed_split)
 
+
+# ==============================================================================================
+# Determine offset_steering ON STRAIGHT LINE
+
+for idx, (phone_s, steer_s, speed_s) in enumerate(zip(phone_splits, steer_splits, speed_splits)):
+    phone, steer, speed = phone_s.copy(), steer_s.copy(), speed_s.copy()
+    gps_unique_points = phone.groupby(['loc_tp']).head(1)
+
+    fig, ax = plt.subplots(1, 1)
+    ax.set_aspect('equal')
+    ax.plot(gps_unique_points.easting, gps_unique_points.northing, c="r", zorder=1)
+    # ax.plot(steer.tp, steer.can_steer, c="r", zorder=1)
+    # fig.suptitle(f"{idx}_{len(gps_unique_points)}")
+    # fig.savefig(f"data/Min_off_steering_steer_ratio_{idx}.png")
+    plt.show()
+    plt.waitforbuttonpress()
+    plt.close("all")
+
+for idx, steer in enumerate(steer_splits):
+    steer["dataset_idx"] = idx
+
+all_steer: pd.DataFrame = pd.concat(steer_splits)
+
+all_steer.boxplot(column=["can_steer"], by="dataset_idx")
+
+outliers = []
+all_steer_wo_o = all_steer[all_steer.dataset_idx.apply(lambda x: x not in outliers)]
+
+all_steer_wo_o.can_steer.plot.box()
+all_steer_wo_o.can_steer.median()  # -15.4
+all_steer_wo_o.can_steer.mean()  # -15.149503459604759
+all_steer_wo_o.can_steer.describe()
+# count    80356.000000
+# mean       -15.149503
+# std          3.221953
+# min        -36.200000
+# 25%        -16.800000
+# 50%        -15.400000
+# 75%        -13.600000
+# max          1.200000
+# Name: can_steer, dtype: float64
 
 # ==============================================================================================
 # Determine offset_steering by optimization
@@ -470,25 +626,27 @@ losses.sort_values(ascending=True).head(10)
 
 # ==============================================================================================
 # Minimize loop closer
-WHEEL_STEER_RATIO = 18.050225
+
+WHEEL_STEER_RATIO = 18.0
 OFFSET_STEERING = 15.45000001
 
 losses = []
-var_offset_steering = np.linspace(14.8000010000001, 15.9001000000001, 100)
-var_steer_ratio = np.linspace(17.9, 18.3, 100)
+var_offset_steering = [15.149503459604759, 15.400000000010011]
+var_steer_ratio = np.linspace(17.8, 18.3, 100)
 
 # MULTI PROCESS
 from multiprocessing import Pool as ThreadPool
+from car_utils import get_car_can_path
 import time
 
 def get_losses(args):
     speed, steer, dataset_idx = args
     losses = []
     print(f"Start {dataset_idx}...")
-    for i, steer_ratio in enumerate(var_steer_ratio):
+    for offset_steering in var_offset_steering:
         stp = time.time()
-        for offset_steering in var_offset_steering:
 
+        for i, steer_ratio in enumerate(var_steer_ratio):
             can_coord = get_car_can_path(speed.copy(), steer.copy(),
                                          steering_offset=offset_steering, wheel_steer_ratio=steer_ratio)
 
@@ -520,34 +678,69 @@ losses = pd.DataFrame(r, columns=["loss", "steer_ratio", "offset_steering", "dat
 fig = plt.figure()
 for idx in range(len(phone_splits)):
     df = losses[losses.dataset_idx == idx]
-    ax = fig.add_subplot(3, 3, idx+1, projection='3d')
+    ax = fig.add_subplot(3, 4, idx+1, projection='3d')
     ax.scatter(df.steer_ratio, df.offset_steering, df.loss, s=1.)
 fig.suptitle("Grid search steer offset and ratio for loops")
 
+# Plot minimum loss coord
+all_data_loss = losses.groupby(["steer_ratio", "offset_steering"])["loss"].apply(lambda x: x.pow(4, axis=0).sum())
+all_data_loss = all_data_loss.reset_index()
+fig = plt.figure()
+ax = fig.add_subplot(1,1,1, projection='3d')
+ax.scatter(all_data_loss.steer_ratio, all_data_loss.offset_steering, all_data_loss.loss, s=1.)
+
+min_off_s, min_s_r = all_data_loss.loc[all_data_loss.loss.idxmin()][["offset_steering", "steer_ratio"]].values
+
+
+# SEEMS like median is the best !
+# All steering smaller than 18. seems weird !
+
+selection = losses[losses.offset_steering == var_offset_steering[1]]
+min_loss = selection.groupby("dataset_idx").loss.idxmin()
+selection = selection.loc[min_loss]
+
+min_steer_ratio = selection[selection.steer_ratio > 18.0].steer_ratio.mean()
+
+matplotlib.rcParams['figure.figsize'] = (18.55, 9.86)
+
+min_off_s  = var_offset_steering[1]
+min_s_r = min_steer_ratio
+"""
+    BEST RESULT: 
+        OFFSET: 15.40000000001001
+         RATIO: 18.215151515151515
+
+"""
 # Plot minimum loss coord
 for idx, (phone_s, steer_s, speed_s) in enumerate(zip(phone_splits, steer_splits, speed_splits)):
     phone, steer, speed = phone_s.copy(), steer_s.copy(), speed_s.copy()
     gps_unique_points = phone.groupby(['loc_tp']).head(1)
 
-    df = losses[losses.dataset_idx == idx]
-
+    # df = losses[losses.dataset_idx == idx]
+    # min_idx = df.loss.idxmin()
+    # min_conf = df.loc[min_idx]
+    # #
+    # min_off_s = min_conf.offset_steering
+    # min_s_r = min_conf.steer_ratio
+    # print(f"IDX: {idx} min_ {min_off_s} _ {min_s_r}")
+    # can_coord = get_car_can_path(speed.copy(), steer.copy(),
+    #                              steering_offset=min_off_s, wheel_steer_ratio=min_s_r)
     can_coord = get_car_can_path(speed.copy(), steer.copy(),
-                                 steering_offset=offset_steering, wheel_steer_ratio=steer_ratio)
+                                 steering_offset=min_off_s, wheel_steer_ratio=min_s_r)
 
-    loss = np.linalg.norm(can_coord.iloc[-1][["coord_x", "coord_y"]].values)
-    losses.append([loss, steer_ratio, offset_steering, dataset_idx])
-
-    fig = plt.figure()
-    plt.scatter(can_coord.coord_x, can_coord.coord_y, s=1.5, c="r", zorder=1)
-    plt.axes().set_aspect('equal')
+    fig, ax = plt.subplots(1, 2)
+    ax[0].scatter(can_coord.coord_x, can_coord.coord_y, s=1.5, c="r", zorder=1)
+    ax[0].set_aspect('equal')
+    ax[1].scatter(gps_unique_points.easting, gps_unique_points.northing, s=1.5, c="r", zorder=1)
+    ax[1].scatter(gps_unique_points.iloc[0].easting, gps_unique_points.iloc[0].northing, s=1.5, c="b", zorder=1)
+    ax[1].scatter(gps_unique_points.iloc[-1].easting, gps_unique_points.iloc[-1].northing, s=1.5, c="black", zorder=1)
+    ax[1].set_aspect('equal')
+    fig.suptitle(f"Offset_steering: {min_off_s}. Steer ratio: {min_s_r}")
+    fig.savefig(f"data/Min_off_steering_steer_ratio_{idx}.png")
     plt.show()
+    plt.waitforbuttonpress()
+    plt.close("all")
 
-    dataset_idx += 1
-
-all_data_loss = losses.groupby(["steer_ratio", "offset_steering"])["loss"].sum()
-fig = plt.figure()
-ax = fig.add_subplot(3, 3, idx + 1, projection='3d')
-ax.scatter(df.steer_ratio, df.offset_steering, df.loss, s=1.)
 
 # -- Iterative
 dataset_idx = 0
