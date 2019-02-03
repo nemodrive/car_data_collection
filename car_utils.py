@@ -371,8 +371,6 @@ def get_rotation(df_coord, gps_unique_points, guess_orientation=180.,
     new_points = pd.DataFrame(np.column_stack([new_points, df_coord.tp.values]),
                               columns=["coord_x", "coord_y", "tp"])
 
-    # new_points.coord_x += gps_unique.iloc[0].easting
-    # new_points.coord_y += gps_unique.iloc[0].northing
     return new_points, gps_unique, result
 
 

@@ -755,6 +755,7 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     dataset_idx += 1
 
 tp = 0.
+
 gps = gps_unique[gps_unique.tp < tp]
 fig = plt.figure()
 plt.plot(gps.easting - gps.easting.min(), gps.northing -
@@ -764,7 +765,7 @@ plt.scatter(gps.easting - gps.easting.min(), gps.northing -
 plt.show()
 plt.axes().set_aspect('equal')
 
-# ==================================================================================================
+# ==============================================================================================
 # Plot GPS
 
 results = []
@@ -781,12 +782,6 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     plt.show()
     plt.pause(0.0001)
     k = input()
-
-
-# ==================================================================================================
-# -- Try to correct path
-
-
 
 
 
