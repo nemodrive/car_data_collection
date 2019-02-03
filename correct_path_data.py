@@ -103,7 +103,7 @@ if __name__ == "__main__":
     arg_parser = ArgumentParser(description='.')
     arg_parser.add_argument('dataset', help='Path to dataset folder.')
     arg_parser.add_argument('export_info', help='Path to export_info file.')
-    arg_parser.add_argument('--map', default="util_data/high_res_full_UPB_hybrid.png", help='Map.')
+    arg_parser.add_argument('--map', default="util_data/high_res_full_UPB_hybrid.jpg", help='Map.')
 
     arg = arg_parser.parse_args()
 
