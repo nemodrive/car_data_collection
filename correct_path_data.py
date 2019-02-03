@@ -71,9 +71,9 @@ def looping():
                                                           guess_offest_y=guess_offest_y,
                                                           simple=False)
 
-        new_points.coord_x -= gps_split.iloc[0].easting
-        new_points.coord_y -= gps_split.iloc[0].northing
-        base_coord = new_points[["coord_x", "coord_y"]].values
+        # new_points.coord_x -= gps_split.iloc[0].easting
+        # new_points.coord_y -= gps_split.iloc[0].northing
+        base_coord = can_coord[["coord_x", "coord_y"]].values
 
         orientation, offset_x, offset_y = result.x
         offset_x += gps_split.iloc[0].easting
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     arg_parser = ArgumentParser(description='.')
     arg_parser.add_argument('dataset', help='Path to dataset folder.')
     arg_parser.add_argument('export_info', help='Path to export_info file.')
-    arg_parser.add_argument('--map', default="util_data/upb_map_0.png", help='Map.')
+    arg_parser.add_argument('--map', default="util_data/high_res_full_UPB_hybrid.png", help='Map.')
 
     arg = arg_parser.parse_args()
 
@@ -139,10 +139,12 @@ if __name__ == "__main__":
     plt.draw()
 
     solver_path = f"{os.path.splitext(arg.export_info)[0]}_{int(time.time()%10000)}.csv"
-    print(solver_path)
+    print(f"Writing solutions to: {solver_path}")
 
     solver = open(solver_path, "a")
-    solver.write(f"interval_idx,start,end,orientation,offset_x,offset_y\n")
+    solver.write(f"interval_idx,start,end,orientation,offset_x,offset_y,"
+                 f"offset_px_row,offset_px_col,"
+                 f"\n")
 
 
     def press(event):
@@ -170,7 +172,11 @@ if __name__ == "__main__":
             st, end = cut_intervals[interval_idx]
             st += tp_reference
             end += tp_reference
-            solver.write(f"{interval_idx},{st},{end},{orientation},{offset_x},{offset_y}\n")
+
+            px_row, px_col = map_viewer.get_image_coord([offset_x], [offset_y])
+
+            solver.write(f"{interval_idx},{st},{end},{orientation},{offset_x},{offset_y},"
+                         f"{px_row[0]},{px_col[0]}\n")
             solver.flush()
 
             closeLooping()
@@ -185,7 +191,6 @@ if __name__ == "__main__":
             fig_gps.canvas.draw()
             plt.draw()
 
-        # print("Calc path with ...", orientation, offset_x, offset_y)
         new_points = get_points_rotated(base_coord, orientation, offset_x, offset_y)
 
         # if fig_path is not None:

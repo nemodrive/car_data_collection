@@ -6,7 +6,7 @@
 # high resolution google map
 # Find the associated blog post at: http://blog.eskriett.com/2013/07/19/downloading-google-maps/
 # https://gis.stackexchange.com/a/42423
-
+# 20 - (40075017/4294967296.0) * (2 ** (24-20)) *  np.cos(np.deg2rad(44.439457))
 """
 decimal places	decimal degrees	N/S or E/W at equator
 2	0.01	1.1132 km
@@ -24,7 +24,6 @@ import cv2
 import pandas as pd
 import utm
 import matplotlib.pyplot as plt
-from sklearn import linear_model
 
 
 class GoogleMapDownloader:
@@ -135,6 +134,14 @@ class ImageWgsHandler:
         base = os.path.splitext(map_path)[0]
         self.reference_points = reference_points = pd.read_csv(f"{base}.csv")
 
+        self.density = None
+        if os.path.isfile(f"{base}.density"):
+            with open(f"{base}.density", "r") as f:
+                self.density = float(f.read().strip())
+
+        if self.density:
+            print(f"Map density: {self.density} m /pixel")
+
         reference_points = reference_points.assign(**{'easting': -1., 'northing': -1.,
                                                       "zone_no": -1., "zone_letter": ""})
 
@@ -146,11 +153,14 @@ class ImageWgsHandler:
             reference_points.at[idx, "zone_no"] = zone_no
             reference_points.at[idx, "zone_letter"] = zone_letter
 
-        # # -- Check conversion
+        # # # -- Check conversion
         # img = plt.imread(map_path)
         # eastings, northings = reference_points.easting.values, reference_points.northing.values
         # rows = row_f.predict(np.column_stack([eastings, northings]))
         # cols = col_f.predict(np.column_stack([eastings, northings]))
+        #
+        # # rows = reference_points.pixel_row
+        # # cols = reference_points.pixel_column
         #
         # fig = plt.figure()
         # right, top = img_cols, img_rows
@@ -161,6 +171,7 @@ class ImageWgsHandler:
         (row_f, col_f), (easting_f, northing_f) = self.get_conversion_functions(reference_points)
         self.row_f, self.col_f = row_f, col_f
         self.easting_f, self.northing_f = easting_f, northing_f
+        self.reference_points = reference_points
 
     @staticmethod
     def get_conversion_functions(reference_points):
@@ -168,12 +179,32 @@ class ImageWgsHandler:
         x = reference_points.easting.values
         y = reference_points.northing.values
 
+        from sklearn import linear_model
+
+        # classifiers = [
+        #     svm.SVR(),
+        #     linear_model.SGDRegressor(),
+        #     linear_model.BayesianRidge(),
+        #     linear_model.LassoLars(),
+        #     linear_model.ARDRegression(),
+        #     linear_model.PassiveAggressiveRegressor(),
+        #     linear_model.TheilSenRegressor(),
+        #     linear_model.LinearRegression()]
+        #
+        # z = reference_points.pixel_row.values
+        #
+        # for item in classifiers:
+        #     print(item)
+        #     clf = item
+        #     clf.fit(np.column_stack([x, y]), z)
+        #     print(np.abs(clf.predict(np.column_stack([x, y])) - z).sum(), '\n')
+
         z = reference_points.pixel_row.values
-        row_f = linear_model.LinearRegression()
+        row_f = linear_model.TheilSenRegressor()
         row_f.fit(np.column_stack([x, y]), z)
 
         z = reference_points.pixel_column.values
-        col_f = linear_model.LinearRegression()
+        col_f = linear_model.TheilSenRegressor()
         col_f.fit(np.column_stack([x, y]), z)
 
         # -- Function conversion from Pixels to wgs
@@ -190,12 +221,12 @@ class ImageWgsHandler:
         return (row_f, col_f), (easting_f, northing_f)
 
     def plot_wgs_coord(self, eastings, northings, padding=100, ax=None, show_image=True, c="r"):
-        row_f, col_f = self.row_f, self.col_f
+        import time
+        st = time.time()
         max_cols, max_rows = self.img_cols, self.img_rows
         img = self.map_image
 
-        rows = row_f.predict(np.column_stack([eastings, northings]))
-        cols = col_f.predict(np.column_stack([eastings, northings]))
+        rows, cols = self.get_image_coord(eastings, northings)
 
         min_rows, max_rows = int(np.clip(rows.min() - padding, 0, max_rows)), \
                              int(np.clip(rows.max() + padding, 0, max_rows))
@@ -216,10 +247,23 @@ class ImageWgsHandler:
         return fig, ax
 
     def get_image_coord(self, eastings, northings):
-        row_f, col_f = self.row_f, self.col_f
 
-        rows = row_f.predict(np.column_stack([eastings, northings]))
-        cols = col_f.predict(np.column_stack([eastings, northings]))
+        if self.density is not None:
+            density = self.density
+            ref_points = self.reference_points
+
+            a = np.column_stack([eastings, northings])
+            b = ref_points[["easting", "northing"]].values
+
+            dist = np.linalg.norm(a[:, np.newaxis] - b, axis=2)
+            ref = ref_points.iloc[dist.argmin(axis=1)]
+            cols = (ref.pixel_column + (eastings - ref.easting)/density).values
+            rows = (ref.pixel_row - (northings - ref.northing)/density).values
+        else:
+            row_f, col_f = self.row_f, self.col_f
+            rows = row_f.predict(np.column_stack([eastings, northings]))
+            cols = col_f.predict(np.column_stack([eastings, northings]))
+
         return rows, cols
 
     def get_wgs_coord(self, rows, cols):
