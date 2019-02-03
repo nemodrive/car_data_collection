@@ -198,7 +198,7 @@ class TrajectoryVisualizer:
         return np.array(points3d)
 
     def render_steer(self, image, steer_angle):
-        r = get_radius(76_angle / WHEEL_STEER_RATIO)
+        r = get_radius(steer_angle / WHEEL_STEER_RATIO)
         return self.render(image, r)
 
     def render(self, image, radius):
