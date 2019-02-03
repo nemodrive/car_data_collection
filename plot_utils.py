@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
 
-def sliding_plot(x, y, axis_lim=None, axis_type='equal', i_start=0, off_before=0, off_after=30):
+def sliding_plot(x, y, axis_lim=None, axis_type='equal', i_start=0, off_before=0, off_after=10000):
 
     fig, ax = plt.subplots()
     plt.subplots_adjust(left=0.25, bottom=0.25)
@@ -23,8 +23,8 @@ def sliding_plot(x, y, axis_lim=None, axis_type='equal', i_start=0, off_before=0
 
     def update(val):
         i_start = int(sfreq.val)
-        l.set_xdata(x[i_start - off_before: i_start + off_after].values)
-        l.set_ydata(y[i_start - off_before: i_start + off_after].values)
+        l.set_xdata(x[i_start - off_before: i_start + off_after])
+        l.set_ydata(y[i_start - off_before: i_start + off_after])
         fig.canvas.draw_idle()
         print(i_start)
 

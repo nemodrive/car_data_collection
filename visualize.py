@@ -25,6 +25,9 @@ from multiprocessing import Process, Queue
 plt.ion()  ## Note this correction
 
 CAN_PLOT_TIME = 5000
+FONT_SCALE = 1.0
+FONT = cv2.FONT_HERSHEY_PLAIN
+FONT_COLOR = (0, 255, 0)
 
 CFG_FILE = "cfg.yaml"
 CFG_EXTRA_FILE = "cfg_extra.yaml"
@@ -37,11 +40,13 @@ if __name__ == "__main__":
 
     arg_parser.add_argument(dest='experiment_path', help='Path to experiment to visualize.')
     arg_parser.add_argument('--camera-view-size', default=400, type=int, dest="camera_view_size")
+    arg_parser.add_argument('--start-tp', default=0, type=float, dest="start_tp")
 
     arg_parser = arg_parser.parse_args()
 
     experiment_path = arg_parser.experiment_path
     camera_view_size = arg_parser.camera_view_size
+    start_tp = arg_parser.start_tp
 
     cfg = read_cfg(os.path.join(experiment_path, CFG_FILE))
     cfg_extra = read_cfg(os.path.join(experiment_path, CFG_EXTRA_FILE))
@@ -62,10 +67,15 @@ if __name__ == "__main__":
     recv_processes = []
     send_queues = []
 
+    ref_tp = 0  # Main camera reference timestamp
     if collect.camera:
         camera_names = ["camera_{}".format(x) for x in cfg.camera.ids]
         camera_cfgs = [getattr(cfg.camera, x) for x in camera_names]
         extra_camera_cfgs = [getattr(cfg_extra, x) for x in camera_names]
+
+        with open(f"{experiment_path}/{camera_names[0]}_timestamp") as infile:
+            lines = infile.readlines()
+            ref_tp = float(lines[0])
 
         # Async mode
         video_loders = []
@@ -151,20 +161,15 @@ if __name__ == "__main__":
         p.start()
 
     print("=" * 70, "Start")
-    cursor_img = np.zeros((100, 100, 3)).astype(np.uint8)
 
-    def get_key(wait_time):
-        cv2.imshow("Cursor", cursor_img)
-        k = cv2.waitKey(wait_time)
-        # r = chr(k % 256)
-        r = k & 0xFF
-        return r
-
-    freq_tp = [1/30., 1/10., 1.]
+    freq_tp = [1/30., 1/10., 1/5., 1/3., 1/2., 1., 2., 5., 10.]
     freq_id = 0
     freq = freq_tp[freq_id]
     r = None
     crt_tp = common_min_max_tp[0]  #+ 60.
+    if start_tp != 0:
+        crt_tp = start_tp
+
     print ("START factor: --->")
     print (crt_tp)
     print ("------------------")
@@ -221,9 +226,30 @@ if __name__ == "__main__":
 
     menu_text = "\n".join([x[1] for x in menu.values()])
 
+    # SHOW menu
+
+    show_menu = True
+    cursor_img = np.zeros((300, 300, 3)).astype(np.uint8)
+
+
+    def get_key(wait_time, tp=0):
+        if show_menu:
+            y0, dy = 10, 25
+            cursor_img = np.zeros((300, 300, 3)).astype(np.uint8)
+            new_text = menu_text + f"\nTP:{tp}"
+            for i, line in enumerate(new_text.split('\n')):
+                y = y0 + i * dy
+                cv2.putText(cursor_img, line, (50, y), FONT, FONT_SCALE, FONT_COLOR)
+
+        cv2.imshow("Cursor", cursor_img)
+        k = cv2.waitKey(wait_time)
+        # r = chr(k % 256)
+        r = k & 0xFF
+        return r
+
     while r != "q":
         prev_tp = time.time()
-        key = get_key(key_wait_time)
+        key = get_key(key_wait_time, tp=crt_tp)
         # plt.clf()
 
         if key == 27:
@@ -235,15 +261,20 @@ if __name__ == "__main__":
 
         # if collect.obd:
         #     obd_data = obd_loader.get_closest(crt_tp)
-
         if collect.can:
             # can_plot.put(crt_tp)
             can_r = can_plot.plot(crt_tp)
+            # crt_steer, crt_speed = (np.random.rand() - 0.5) * 500, None
+            crt_steer, crt_speed = None, None
+
+            if "steer" in can_r:
+                crt_steer = can_r["steer"]["steer"]
+            if "speed" in can_r:
+                crt_speed = can_r["speed"]["mps"]
 
         if collect.camera:
-            print ("------")
             for v in video_loders:
-                v.put([0, crt_tp, can_r["steer"]["steer"]])
+                v.put([0, crt_tp, crt_steer])
                 # dif_tp, frame = v.get_closest(crt_tp)
                 # v.show(frame)
 
@@ -270,7 +301,7 @@ if __name__ == "__main__":
         if live_play:
             crt_tp += (time.time() - prev_tp) * playback_factor
 
-        print (crt_tp)
+        print(f"crt_tp: {crt_tp} ({crt_tp - ref_tp}) \t Steer: {crt_steer} \t speed: {crt_speed}")
 
     for q in send_queues:
         q.put(-1)

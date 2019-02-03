@@ -198,7 +198,7 @@ class TrajectoryVisualizer:
         return np.array(points3d)
 
     def render_steer(self, image, steer_angle):
-        r = get_radius(steer_angle / WHEEL_STEER_RATIO)
+        r = get_radius(76_angle / WHEEL_STEER_RATIO)
         return self.render(image, r)
 
     def render(self, image, radius):
@@ -265,7 +265,7 @@ def main_revised():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     def get_frame_from_image():
-        rgb = cv2.imread("/media/andrei/Samsung_T51/nemodrive/24_nov/session1/1543056914.68_camera_3_off_181ms.jpg")
+        rgb = cv2.imread("/media/nemodrive0/Samsung_T5/nemodrive/24_nov/session1/1543056917.67_camera_3_off_183ms.jpg")
         return rgb
 
     def get_frame_from_webcam():
@@ -286,11 +286,16 @@ def main_revised():
         cv2.imshow("image", image)
 
     def update(val):
-        data['r']  = get_radius(angles[400 - val - 1])
+        data['r'] = get_radius(angles[400 - val - 1])
+        loop()
+
+    def update_steer(val):
+        data['r'] = get_radius((val-500) / WHEEL_STEER_RATIO)
         loop()
 
     cv2.namedWindow('image')
-    cv2.createTrackbar('angle', 'image', idx, 400 - 1, update)
+    # cv2.createTrackbar('angle', 'image', idx, 400 - 1, update)
+    cv2.createTrackbar('angle', 'image', 0, 1000, update_steer)
 
     while True:
         loop()

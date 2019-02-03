@@ -361,7 +361,7 @@ class VideoLoad:
             print("[{}] [ERROR] No frame ({})".format(self.filename, data))
             return False
 
-        frame = data["frame"]
+        frame = data["frame"].copy()
         show_guidelines = data.get("show_guidelines", True)
         steer = data.get("steer", None)
 
@@ -381,7 +381,7 @@ class VideoLoad:
 
             trajectory_view = self.trajectory_view
             if steer:
-                trajectory_view.render_steer(frame, steer)
+                frame = trajectory_view.render_steer(frame, steer)
 
         frame_view = cv2.resize(frame, (0, 0), fx=scale_view, fy=scale_view)
         cv2.imshow(self.filename, frame_view)
@@ -402,7 +402,7 @@ def async_camera_draw(experiment_path, camera_name, cfg_camera, camera_view_size
         dif_tp, frame = v.get_closest(msg[1])
 
         # TODO Should find a nicer way to get steer msg
-        if msg[2] > 0:
+        if msg[2] is not None:
             frame["steer"] = msg[2]
 
         v.show(frame)

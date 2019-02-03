@@ -14,20 +14,31 @@ CAR_L = 2.634  # Wheel base - ampatament
 CAR_T = 1.497  # Tread - ecartament fata vs 1.486 ecartament spate
 MIN_TURNING_RADIUS = 5. # Seems ok, found specs with 5.25 or 5.5, though
 # WHEEL_STEER_RATIO = 18.053225
-WHEEL_STEER_RATIO = 18.0
+# WHEEL_STEER_RATIO = 18.05
+WHEEL_STEER_RATIO = 18.215151515151515
 
 # OFFSET_STEERING = 16.904771342679405
 # OFFSET_STEERING = 16.394771342679383
 # OFFSET_STEERING = 15.794771342679383
+# OFFSET_STEERING = 15.720720720720720
+# OFFSET_STEERING = 14.41051051051051
+# OFFSET_STEERING = 15.45
 # OFFSET_STEERING = 15.72072072072072
 # OFFSET_STEERING = 15.720720720720720
 # OFFSET_STEERING = 14.41051051051051
-OFFSET_STEERING = 15.45051051051051
+# OFFSET_STEERING = 15.45051051051051
+OFFSET_STEERING = 15.40000000001001
+
 # Best so far - record MAX can wheel turn -> diff with 5.m radius
+MAX_R = 9999999999.9999999
 
 
 def get_radius(wheel_angle, car_l=CAR_L):
-    r = car_l / np.tan(np.deg2rad(wheel_angle, dtype=np.float64))
+    if wheel_angle != 0.0:
+        r = car_l / np.tan(np.deg2rad(wheel_angle, dtype=np.float64))
+    else:
+        r = MAX_R
+
     return r
 
 
