@@ -16,6 +16,7 @@ import time
 
 from utils import namespace_to_dict, exclude_intervals
 from data_utils import load_experiment_data, adjust_camera_cfg
+from car_utils import get_corrected_path
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
@@ -39,10 +40,13 @@ TIME_TO_MS = True
 GROUPS = dict({
     # Group name : {1: [<regex>, ] #include, 0: [<regex>, ] #exclude}
     "good": {1: ["full"], 0: ["bad_*", "long_stationary", "turn"]}
+    # "bad": {1: ["bad_driving"], 0: ["bad_*", "long_stationary", "turn"]}
 })
 
 MAX_VIDEO_CUT_THREADS = 10
 WAIT_TIME = 5.0
+
+zone_no, zone_letter = None, None
 
 
 def run_video_cut_cmd(video_path, video_size, start_time, duration, out_path):
@@ -63,23 +67,45 @@ def ffmpeg_time_format(seconds: float):
     return datetime.utcfromtimestamp(seconds).strftime("%H:%M:%S.%f")
 
 
-def get_bdd_like_locations(phone, speed, steer, get_time=None):
+def get_bdd_like_locations(phone, speed, steer, get_time=None, corrected_course=None):
     print("Generate BDD like locations intervals ...")
+    global zone_no, zone_letter
 
     gps_unique = phone.groupby(['loc_tp']).head(1)
 
-    # Get necessary columns from phone data
-    columns = dict({
-        "trueHeading": "course",
-        "tp": "timestamp",
-        "latitude": "latitude",
-        "longitude": "longitude",
-        "loc_accuracy": "accuracy",
-    })
-    location = gps_unique[list(columns.keys())].copy()
+    if corrected_course is not None:
+        import utm
+
+        corrected_course = corrected_course.sort_values("tp")
+        assert (zone_no is not None and zone_letter is not None), \
+            f"Zone_no or zone letter is None {zone_no}, {zone_letter}"
+
+        corrected_course = corrected_course.assign(**{'latitude': -1., 'longitude': -1.})
+
+        for idx, row in corrected_course.iterrows():
+            new_lat, new_long = utm.to_latlon(row.easting, row.northing,
+                                              zone_no, zone_letter)
+
+            corrected_course.at[idx, "latitude"] = new_lat
+            corrected_course.at[idx, "longitude"] = new_long
+
+        location = corrected_course
+        columns = dict({
+            "tp": "timestamp",
+        })
+    else:
+        # Get necessary columns from phone data
+        columns = dict({
+            "trueHeading": "course",
+            "tp": "timestamp",
+            "latitude": "latitude",
+            "longitude": "longitude",
+            "loc_accuracy": "accuracy",
+        })
+        location = gps_unique[list(columns.keys())].copy()
+        location.loc[:, "loc_accuracy"] = location.loc_accuracy.apply(lambda x: x["x"])
 
     # Get only loc accuracy on x
-    location.loc[:, "loc_accuracy"] = location.loc_accuracy.apply(lambda x: x["x"])
 
     # Get closest speed from CAN DATA
     speed = speed.sort_values("tp")
@@ -107,6 +133,12 @@ def get_bdd_like_locations(phone, speed, steer, get_time=None):
 
 
 def filter_phone_data(phone):
+    global zone_no, zone_letter
+    assert phone.zone_no.nunique() == 1, "Different gps zone_no's"
+    assert phone.zone_letter.nunique() == 1, "Different gps zone_letter's"
+    zone_no = phone.zone_no.unique()[0]
+    zone_letter = phone.zone_letter.unique()[0]
+
     phone = phone.drop(["location", "msg_client_ids", "zone_no", "zone_letter", "global",
                         "updateInterval"], axis=1)
     return phone
@@ -141,7 +173,7 @@ def croll_info(base_path):
 
 
 # ======================================================================================================================
-def main(experiment_path, out_fld, export_videos=True):
+def main(experiment_path, out_fld, export_videos=True, force_json=True):
 
     # Read info
     with open(os.path.join(experiment_path, INFO_FILE)) as f:
@@ -172,11 +204,17 @@ def main(experiment_path, out_fld, export_videos=True):
         valid_ = []
         exclude_ = []
 
+        print("\nValid intervals: ....")
+        print("<><><><><><><><><><><>")
         for rule in group_rules[1]:
             for k, v in segments.items():
                 if re.match(rule, k) is not None:
                     print(k)
                     valid_ += v
+        print("<><><><><><><><><><><>\n")
+
+        print("Exclude intervals: ....")
+        print("<><><><><><><><><><><>")
         for rule in group_rules[0]:
             for k, v in segments.items():
                 if re.match(rule, k) is not None:
@@ -186,6 +224,8 @@ def main(experiment_path, out_fld, export_videos=True):
                         v = [[x[0] - tp_reference, x[1] - tp_reference] for x in v]
 
                     exclude_ += v
+        print("<><><><><><><><><><><>")
+
         valid_intervals = exclude_intervals(valid_, exclude_)
         cut_intervals = []
         for start, end in valid_intervals:
@@ -204,6 +244,7 @@ def main(experiment_path, out_fld, export_videos=True):
 
         # Generate group folder
         g_out_fld = os.path.join(out_fld, group)
+        g_info_out_fld = os.path.join(g_out_fld, "info")
         if os.path.isdir(g_out_fld):
             print(f"Group folder exists {g_out_fld}")
             # k = input("Do you want to continue? y/n")
@@ -215,12 +256,15 @@ def main(experiment_path, out_fld, export_videos=True):
             continue_session = False
             os.mkdir(g_out_fld)
 
-        # Generate BDD Like locations
-        locations = get_bdd_like_locations(edata.phone, edata.speed, edata.steer, get_time=get_time)
+        if os.path.isdir(g_info_out_fld):
+            print(f"Group info folder exists {g_out_fld}")
+        else:
+            os.mkdir(g_info_out_fld)
 
         # Save export info
         export_info_path = os.path.join(g_out_fld, "export_info.npy")
         intervals_out = os.path.join(g_out_fld, "intervals.csv")
+        corrected_path = os.path.join(g_out_fld, "corrected_path.csv")
 
         if continue_session:
             export_info = np.load(export_info_path).item()
@@ -238,7 +282,41 @@ def main(experiment_path, out_fld, export_videos=True):
 
             np.save(export_info_path, export_info)
 
+        # Get Cart WGS84 path corrected with file
+
+        corrected_path_df = None
+        if os.path.isfile(corrected_path):
+            print("Found path correction file")
+            path_corrections = pd.read_csv(corrected_path)
+            corrected_path_df = get_corrected_path(path_corrections, edata.steer, edata.speed)
+
+            #  Plot on image
+            from street_view import ImageWgsHandler
+            import matplotlib.pyplot as plt
+
+            map_viewer = ImageWgsHandler("util_data/high_res_full_UPB_hybrid.jpg")
+
+            fig, ax = map_viewer.plot_wgs_coord(corrected_path_df.easting.values, corrected_path_df.northing.values)
+            plt.show(block=False)
+            plt.pause(0.0001)
+
+            fig.suptitle(f"Corrected path")
+            fig.set_size_inches(18.55, 9.86)
+            fig.savefig(f"{g_info_out_fld}/Corrected path.png")
+            plt.close('all')
+
+        # Generate BDD Like locations
+        locations = get_bdd_like_locations(edata.phone, edata.speed, edata.steer, get_time=get_time,
+                                           corrected_course=corrected_path_df)
+
         video_cut_pocs = []
+
+        # plt.scatter(locations.timestamp.values, locations.course.values, s=1.)
+        #
+        # plt.waitforbuttonpress()
+        # plt.close("all")
+        #
+        # continue
 
         for interval_no, (start, end) in enumerate(cut_intervals):
             print(f"Generate interval data: {start} - {end}")
@@ -250,6 +328,8 @@ def main(experiment_path, out_fld, export_videos=True):
             end_time = tp_reference + end
             data["startTime"] = start_time_ms = get_time(tp_reference + start)
             data["endTime"] = end_time_ms = get_time(tp_reference + end)
+            data["zone_no"] = zone_no
+            data["zone_letter"] = zone_letter
 
             # -- CAMERA STUFF
 
@@ -304,7 +384,7 @@ def main(experiment_path, out_fld, export_videos=True):
 
             data_path = os.path.join(g_out_fld, rideID[:16]+".json")
 
-            if not os.path.isfile(data_path):
+            if not os.path.isfile(data_path) or force_json:
 
                 # -- Phone STUFF
                 # Write locations like bdd data
@@ -312,11 +392,31 @@ def main(experiment_path, out_fld, export_videos=True):
                     (locations.timestamp >= start_time_ms) & (locations.timestamp <= end_time_ms)
                 ].to_dict("records")
 
+                # # Write corrected_path data
+                # if corrected_path_df is not None:
+                #     data["corrected_path"] = corrected_path_df[
+                #         (corrected_path_df.tp >= start_time) & (corrected_path_df.tp <= end_time)
+                #         ].to_dict("list")
+                #
+                # import matplotlib.pyplot as plt
+                # ll = locations[
+                #     (locations.timestamp >= start_time_ms) & (locations.timestamp <= end_time_ms)
+                # ]
+                # cc = corrected_path_df[
+                #         (corrected_path_df.tp >= start_time) & (corrected_path_df.tp <= end_time)
+                #         ]
+                # plt.scatter(cc.tp.apply(get_time), cc.course, s=1.)
+                # # print(ll.timestamp)
+                # # print(ll.course)
+                # plt.scatter(ll.timestamp.values, ll.course.values, s=1.)
+                #
+                # plt.waitforbuttonpress()
+                # plt.close("all")
+
                 # Write other PHONE data ....
                 data["phone_data"] = edata.phone[
                     (edata.phone.tp >= start_time) & (edata.phone.tp <= end_time)
                 ].to_dict("list")
-                print(len(data["phone_data"]["acceleration"]))
 
                 # -- CAN STUFF
                 # Write OTHER STEER data ....

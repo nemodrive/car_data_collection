@@ -125,6 +125,19 @@ class GoogleMapDownloader:
         return map_img
 
 
+def add_wgs84(df, latitude="latitude", longitude="longitude"):
+    df = df.assign(**{'easting': -1., 'northing': -1., "zone_no": -1., "zone_letter": ""})
+
+    for idx, row in df.iterrows():
+        easting, northing, zone_no, zone_letter = utm.from_latlon(row[latitude],
+                                                                  row[longitude])
+        df.at[idx, "easting"] = easting
+        df.at[idx, "northing"] = northing
+        df.at[idx, "zone_no"] = zone_no
+        df.at[idx, "zone_letter"] = zone_letter
+    return df
+
+
 class ImageWgsHandler:
     def __init__(self, map_path):
         self.map_image = map_image = cv2.imread(map_path)
@@ -142,16 +155,7 @@ class ImageWgsHandler:
         if self.density:
             print(f"Map density: {self.density} m /pixel")
 
-        reference_points = reference_points.assign(**{'easting': -1., 'northing': -1.,
-                                                      "zone_no": -1., "zone_letter": ""})
-
-        for idx, row in reference_points.iterrows():
-            easting, northing, zone_no, zone_letter = utm.from_latlon(row["latitude"],
-                                                                      row["longitude"])
-            reference_points.at[idx, "easting"] = easting
-            reference_points.at[idx, "northing"] = northing
-            reference_points.at[idx, "zone_no"] = zone_no
-            reference_points.at[idx, "zone_letter"] = zone_letter
+        reference_points = add_wgs84(reference_points)
 
         # # # -- Check conversion
         # img = plt.imread(map_path)
@@ -181,6 +185,8 @@ class ImageWgsHandler:
 
         from sklearn import linear_model
 
+        # from sklearn import svm
+        #
         # classifiers = [
         #     svm.SVR(),
         #     linear_model.SGDRegressor(),
@@ -188,11 +194,17 @@ class ImageWgsHandler:
         #     linear_model.LassoLars(),
         #     linear_model.ARDRegression(),
         #     linear_model.PassiveAggressiveRegressor(),
-        #     linear_model.TheilSenRegressor(),
-        #     linear_model.LinearRegression()]
+        #     linear_model.TheilSenRegressor(max_iter=1000, tol=1.e-7),
+        #     linear_model.LinearRegression(normalize=True)]
         #
         # z = reference_points.pixel_row.values
+        # for item in classifiers:
+        #     print(item)
+        #     clf = item
+        #     clf.fit(np.column_stack([x, y]), z)
+        #     print(np.abs(clf.predict(np.column_stack([x, y])) - z).sum(), '\n')
         #
+        # z = reference_points.pixel_column.values
         # for item in classifiers:
         #     print(item)
         #     clf = item
@@ -200,11 +212,11 @@ class ImageWgsHandler:
         #     print(np.abs(clf.predict(np.column_stack([x, y])) - z).sum(), '\n')
 
         z = reference_points.pixel_row.values
-        row_f = linear_model.TheilSenRegressor()
+        row_f = linear_model.LinearRegression()
         row_f.fit(np.column_stack([x, y]), z)
 
         z = reference_points.pixel_column.values
-        col_f = linear_model.TheilSenRegressor()
+        col_f = linear_model.LinearRegression()
         col_f.fit(np.column_stack([x, y]), z)
 
         # -- Function conversion from Pixels to wgs
@@ -220,13 +232,16 @@ class ImageWgsHandler:
 
         return (row_f, col_f), (easting_f, northing_f)
 
-    def plot_wgs_coord(self, eastings, northings, padding=100, ax=None, show_image=True, c="r"):
+    def plot_wgs_coord(self, eastings, northings, padding=100, ax=None, show_image=True, c="r", convert_method=0):
         import time
+        if len(eastings) <= 0:
+            return
+
         st = time.time()
         max_cols, max_rows = self.img_cols, self.img_rows
         img = self.map_image
 
-        rows, cols = self.get_image_coord(eastings, northings)
+        rows, cols = self.get_image_coord(eastings, northings, convert_method=convert_method)
 
         min_rows, max_rows = int(np.clip(rows.min() - padding, 0, max_rows)), \
                              int(np.clip(rows.max() + padding, 0, max_rows))
@@ -246,9 +261,9 @@ class ImageWgsHandler:
 
         return fig, ax
 
-    def get_image_coord(self, eastings, northings):
+    def get_image_coord(self, eastings, northings, convert_method=1):
 
-        if self.density is not None:
+        if self.density is not None and convert_method == 0:
             density = self.density
             ref_points = self.reference_points
 
@@ -272,6 +287,48 @@ class ImageWgsHandler:
         easting = easting_f.predict(np.column_stack([rows, cols]))
         northing = northing_f.predict(np.column_stack([rows, cols]))
         return easting, northing
+
+
+def validate_reference_points():
+    base = "util_data/high_res_full_UPB_hybrid"
+    map_image = cv2.imread(f"{base}.jpg")
+    with open(f"{base}.density", "r") as f:
+        density = float(f.read().strip())
+    start_lat, start_long = 44.444122, 26.042366
+
+    start_easting, start_northing, zone_no, zone_letter = utm.from_latlon(start_lat, start_long)
+
+    reference_points = pd.read_csv(f"{base}.csv")
+    reference_points = add_wgs84(reference_points)
+
+    img = plt.imread(f"{base}.jpg")
+
+    img_rows, img_cols, _ = map_image.shape
+    for idx, row in reference_points.iterrows():
+        if idx < 25:
+            continue
+        print(f"IDX: {idx}")
+        px_row = row.pixel_row
+        px_col = row.pixel_column
+
+        # PLOT pixel
+        fig = plt.figure()
+        right, top = img_cols, img_rows
+        plt.imshow(img, extent=[0, right, 0, top])
+        plt.scatter(px_col, top-px_row, s=4.5, c="r")
+        plt.axes().set_aspect('equal')
+
+        # PLOT gps
+        x = (row.easting - start_easting)/density
+        y = (start_northing - row.northing)/density
+        # fig = plt.figure()
+        # right, top = img_cols, img_rows
+        # plt.imshow(img, extent=[0, right, 0, top])
+        plt.scatter(x, top-y, s=3.5, c="b")
+        plt.axes().set_aspect('equal')
+
+        plt.waitforbuttonpress()
+        plt.close("all")
 
 
 def main():

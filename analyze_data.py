@@ -17,12 +17,23 @@ PHONE_FILE = "phone.log.pkl"
 
 
 def main():
-    exp = "/media/nemodrive0/Samsung_T5/nemodrive/25_nov/session_2/1543155398_log"
+    exp = "/media/nemodrive0/Samsung_T5/nemodrive/18_nov/session_0/1542537659_log"
     phone = pd.read_pickle("{}/phone.log.pkl".format(exp))
     steer = pd.read_csv("{}/steer.csv".format(exp))
     speed = pd.read_csv("{}/speed.csv".format(exp))
 
     offset_tp = 1543059543.52
+
+# ==================================================================================================
+# Analyze bdd
+import json
+
+with open("/media/nemodrive0/Samsung_T5/BDD_SAMPLE/tfrecords_from_train/02b6d2a0-54fc4ce8.json") as f:
+    data = json.load(f)
+
+fig = plt.figure()
+df = pd.DataFrame(data["locations"])
+df.course.plot()
 
 # ==================================================================================================
 # Plot gps
@@ -783,7 +794,45 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     plt.pause(0.0001)
     k = input()
 
+# ==============================================================================================
+# Plot Corrected paths
+import glob
+from car_utils import get_corrected_path
+import os
+from data_utils import load_experiment_data
+from street_view import ImageWgsHandler
 
 
+corrected_paths = glob.glob("/media/nemodrive0/Samsung_T5/nemodrive/**/*_log/corrected_path.csv", recursive=True)
+
+corrected_path_dfs = []
+gpss = []
+for idx, corrected_path in enumerate(corrected_paths):
+    experiment_path = os.path.dirname(corrected_path)
+    edata = load_experiment_data(experiment_path)
+
+    gps_unique = edata.phone.groupby(['loc_tp']).head(1)
+    gpss.append(gps_unique)
+
+    # print("Found path correction file")
+    # path_corrections = pd.read_csv(corrected_path)
+    # corrected_path_df = get_corrected_path(path_corrections, edata.steer, edata.speed)
+    # corrected_path_df["dataset_idx"] = idx
+    # corrected_path_dfs.append(corrected_path_df)
 
 
+corrected_path_dfs = pd.concat(corrected_path_dfs)
+gpss = pd.concat(gpss)
+
+#  Plot only points
+fig = plt.figure()
+plt.scatter(corrected_path_dfs.easting, corrected_path_dfs.northing, s=1.5, c="r", zorder=1)
+plt.axes().set_aspect('equal')
+
+#  Plot on image
+map_viewer = ImageWgsHandler("util_data/high_res_full_UPB_hybrid.jpg")
+
+fig, ax = map_viewer.plot_wgs_coord(corrected_path_dfs.easting.values, corrected_path_dfs.northing.values, convert_method=1)
+
+# Plot gps
+fig, ax = map_viewer.plot_wgs_coord(gpss.easting.values, gpss.northing.values, convert_method=1)

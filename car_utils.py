@@ -138,7 +138,8 @@ def get_car_can_path(speed_df, steer_df, steering_offset=OFFSET_STEERING, wheel_
 
     # Update steer and speed (might be initialized correctly already)
     steer_df.steer = steer_df.can_steer + steering_offset
-    speed_df["mps"] = speed_df.speed * 1000 / 3600.
+    if "mps" not in speed_df.columns:
+        speed_df["mps"] = speed_df.speed * 1000 / 3600.
 
     ss = pd.merge(speed_df, steer_df, how="outer", on=["tp"])
     ss = ss.sort_values("tp")
@@ -434,6 +435,51 @@ def get_bearing(coord1, coord2):
     if brng < 0:
         brng += 360
     return brng
+
+
+def get_corrected_path(corrections_df: pd.DataFrame, steer, speed):
+
+    path_data = []
+
+    for idx, row in corrections_df.iterrows():
+        tp_start, tp_end = row.start, row.end
+        steer_split = steer[(steer.tp >= tp_start) & (steer.tp < tp_end)]
+        speed_split = speed[(speed.tp >= tp_start) & (speed.tp < tp_end)]
+
+        orientation = row.orientation
+        steering_offset = row.steering_offset
+        steering_ratio = row.wheel_steer_ratio
+        offset_x, offset_y = row.offset_x, row.offset_y
+
+        can_coord = get_car_can_path(speed_split.copy(), steer_split.copy(), steering_offset=steering_offset,
+                                     wheel_steer_ratio=steering_ratio)
+        base_coord = can_coord[["coord_x", "coord_y"]].values
+
+        new_points = get_points_rotated(base_coord, orientation, offset_x, offset_y)
+
+        df_coord = pd.DataFrame(np.column_stack([new_points, can_coord.tp.values]),
+                                columns=["easting", "northing", "tp"])
+
+        pos_vec = new_points[1:, :] - new_points[:-1, :]
+        course = 360 - ((np.rad2deg(np.arctan2(pos_vec[:, 1], pos_vec[:, 0])) - 90) % 360)
+
+        # TODO could check if we have data for the future
+        df_coord["course"] = np.concatenate([course, [course[-1]]])  # TODO Last orientation is hardcoded
+
+        path_data.append(df_coord)
+
+    full_path = pd.concat(path_data)
+
+    # Check
+    # import matplotlib.pyplot as plt
+    # plt.scatter(full_path.tp, full_path.course, s=1.)
+    # plt.scatter(phone.tp, phone.trueHeading, s=1.)
+    #
+    # plt.scatter(full_path.easting - full_path.easting.min(), full_path.northing -
+    #             full_path.northing.min(), s=1.5, c="r", zorder=1)
+    # plt.axes().set_aspect('equal')
+
+    return full_path
 
 
 def get_car_path_approximation(phone, steer, speed, gps_points_approx=15,
