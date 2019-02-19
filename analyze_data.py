@@ -794,7 +794,7 @@ for phone_s, steer_s, speed_s in zip(phone_splits, steer_splits, speed_splits):
     plt.pause(0.0001)
     k = input()
 
-# ==============================================================================================
+# ==================================================================================================
 # Plot Corrected paths
 import glob
 from car_utils import get_corrected_path
@@ -836,3 +836,161 @@ fig, ax = map_viewer.plot_wgs_coord(corrected_path_dfs.easting.values, corrected
 
 # Plot gps
 fig, ax = map_viewer.plot_wgs_coord(gpss.easting.values, gpss.northing.values, convert_method=1)
+
+# ==================================================================================================
+# Plot Corrected paths
+import glob
+import numpy as np
+import json
+import matplotlib.pyplot as plt
+
+good_data_info_f = glob.glob("/media/nemodrive0/Samsung_T5/nemodrive/**/good/export_info.npy", recursive=True)
+bad_data_info_f = glob.glob("/media/nemodrive0/Samsung_T5/nemodrive/**/bad/export_info.npy", recursive=True)
+
+low_light_paths = ["15_nov/1542296320_log", "18_nov/session_2/1542563017_log", ]
+
+def load_data(export_infos):
+
+    all_df = []
+    for export_info in export_infos:
+        e = np.load(export_info).item()
+        de = pd.DataFrame([e["cut_intervals"], e["rideIDs"]], index=["cut_interval", "rideID"]).T
+        de["g_out_fld"] = e["g_out_fld"]
+        de["experiment_path"] = e["experiment_path"]
+        all_df.append(de)
+    all_df = pd.concat(all_df).reset_index()
+    all_df["fileID"] = all_df.rideID.apply(lambda x: x[:16])
+    all_df["start_pts"] = all_df.cut_interval.apply(lambda x: x[0])
+    all_df["end_pts"] = all_df.cut_interval.apply(lambda x: x[1])
+    return all_df
+
+def load_jsons(export_info_df: pd.DataFrame):
+
+    all_data = []
+    all_locations = []
+    for idx, row in export_info_df.iterrows():
+        ride_path = os.path.join(row["g_out_fld"], row["fileID"]+".json")
+        with open(ride_path) as f:
+            data = json.load(f)
+
+        locations = pd.DataFrame(data["locations"])
+        locations["rideID"] = row["rideID"]
+
+        all_data.append(data)
+        all_locations.append(locations)
+
+    all_locations = pd.concat(all_locations).reset_index()
+    return all_data, all_locations
+
+good_data_info = load_data(good_data_info_f)
+bad_data_info = load_data(bad_data_info_f)
+
+
+df = low_light_sample = good_data_info[good_data_info.experiment_path.apply(lambda x: any([y in x for y in low_light_paths]))]
+df = good_data_info
+df = bad_data_info
+
+
+data, locations = load_jsons(df)
+
+print("Duration {} h".format((df.end_pts - df.start_pts).sum()/ 3600.))
+
+# Calculate distance
+locations = locations.sort_values("timestamp")
+coord = np.array([locations["easting"].values, locations["northing"].values]).transpose()
+
+# select data just from indiv rides rideID
+select_ind_rides = (locations.rideID.duplicated().values)[1:]
+
+dist_coord = np.linalg.norm(coord[1:] - coord[:-1], axis=1) # Distances
+dist_coord = dist_coord[select_ind_rides]
+
+print("distance in Km: {}".format(dist_coord.sum() / 1000.))
+
+fig = plt.figure()
+plt.plot(dist_coord)
+
+fig = plt.figure()
+plt.boxplot(dist_coord, labels=["distanec in m"])
+plt.title("Distance gap in CAN log data")
+
+# Histogram relative course diff
+diff_course_t = 1/3. * 1000. # ms
+idx = 0
+all_course_diff = []
+f_locations = locations[locations.speed > 0]  # Only with speed greater than 0
+for idx, row in f_locations.groupby("rideID"):
+    row = row.sort_values("timestamp")
+    min_tp, max_tp  = row.timestamp.min(), row.timestamp.max()
+    groups = row.groupby(pd.cut(row.timestamp, np.arange(min_tp, max_tp, diff_course_t)))
+    course_t_next = groups.course.apply(lambda x: x.tail(1)).values
+    course_t = groups.course.apply(lambda x: x.head(1)).values
+
+    course_dif = course_t_next - course_t
+    course_dif = (course_dif + 180.) % 360. - 180.
+    tp_dif = groups.apply(lambda x: x.tail(1)).timestamp.values - groups.apply(lambda x: x.head(1)).timestamp.values
+
+    course_dif = course_dif[tp_dif > diff_course_t/2.]  # Filter too much variance
+    all_course_diff.append(course_dif)
+
+all_course_diff = np.concatenate(all_course_diff)
+
+fig = plt.figure()
+plt.boxplot(all_course_diff)
+
+fig = plt.figure()
+plt.hist(all_course_diff[np.abs(all_course_diff) < all_course_diff.std() * 6], bins=200)
+
+
+# ==================================================================================================
+# --- Box with  cut out lines
+
+f, (ax, ax2) = plt.subplots(2, 1, sharex=True)
+ax.set_title(f"Course difference histogram for bins of {diff_course_t:.4} ms")
+# plot the same data on both axes
+ax.hist(all_course_diff[np.abs(all_course_diff) < all_course_diff.std() * 6], bins=200)
+ax2.hist(all_course_diff[np.abs(all_course_diff) < all_course_diff.std() * 6], bins=200)
+
+# ax.set_xlabel('course diff')
+# ax.set_ylabel('minutes')
+ax2.set_xlabel('course diff')
+ax2.set_ylabel('minutes')
+
+# zoom-in / limit the view to different portions of the data
+ax.set_ylim(1000., 11000.)  # outliers only
+ax2.set_ylim(0., 600.)  # most of the data
+
+labels = [item.get_text() for item in ax.get_yticklabels()]
+new_labels = [f"{int(float(x) * diff_course_t/(1000. * 60))}" for x in labels]
+ax.set_yticklabels(new_labels)
+labels = [item.get_text() for item in ax2.get_yticklabels()]
+new_labels = [f"{int(float(x) * diff_course_t/(1000. * 60))}" for x in labels]
+ax2.set_yticklabels(new_labels)
+
+# hide the spines between ax and ax2
+ax.spines['bottom'].set_visible(False)
+ax2.spines['top'].set_visible(False)
+ax.xaxis.tick_top()
+ax.tick_params(labeltop='off')  # don't put tick labels at the top
+ax2.xaxis.tick_bottom()
+
+d = .015  # how big to make the diagonal lines in axes coordinates
+# arguments to pass to plot, just so we don't keep repeating them
+kwargs = dict(transform=ax.transAxes, color='k', clip_on=False)
+ax.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
+ax.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
+
+kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
+ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
+ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
+# ==================================================================================================
+
+
+t = []
+for i in groups.index.values:
+    t.append(i.right - i.left)
+
+fig = plt.figure()
+plt.scatter(locations.easting, locations.northing,  s=1.5)
+plt.show()
+plt.axes().set_aspect('equal')
