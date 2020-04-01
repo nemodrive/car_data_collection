@@ -30,18 +30,17 @@ cvlc v4l2:///dev/video0 # view video
 
 """
 
-import cv2
 import os
 import subprocess
-from subprocess import PIPE, STDOUT
+from subprocess import PIPE
 import time
 import pandas as pd
 import glob
 import numpy as np
-import math
-from turn_radius_projection_demo import TurnRadius
-
+from trajectory_visualizer import TrajectoryVisualizer, DEFAULT_CFG
 from utils import get_nonblocking
+import cv2
+from argparse import Namespace
 
 # FFMPEG_COMMAND = "ffmpeg -f v4l2 -framerate {}" \
 #                  " -video_size {}x{} " \
@@ -236,7 +235,8 @@ def get_camera(cfg):
 
 class VideoLoad:
     def __init__(self, experiment_path, camera_name, cfg_camera,
-                 frame_buffer_size=500, view_height=400, flip_view=0, max_tp=1.0):
+                 frame_buffer_size=500, view_height=400, flip_view=0, max_tp=1.0,
+                 show_steering = True):
         dirname = experiment_path
         filename = camera_name
         fls = glob.glob(os.path.join(dirname, filename) + ".*")
@@ -244,6 +244,12 @@ class VideoLoad:
         assert len(fls) == 1, "Cannot find {} ({})".format(filename, fls)
 
         self.cfg_camera = cfg_camera
+        rvec = cfg_camera.rvec
+        tvec = cfg_camera.tvec
+        camera_matrix = cfg_camera.camera_matrix
+        camera_position = cfg_camera.camera_position
+        distortion = cfg_camera.distortion
+
         print(cfg_camera)
         self.max_tp = max_tp
         self.filename = filename
@@ -263,6 +269,15 @@ class VideoLoad:
         self.scale_view = view_height / self.vid.get(cv2.CAP_PROP_FRAME_HEIGHT)
         self.flip_view = flip_view
 
+        trajectory_view = None
+        if show_steering:
+            trajectory_cfg = DEFAULT_CFG
+            trajectory_cfg.update(cfg_camera.__dict__)
+            cfg = Namespace()
+            cfg.__dict__ = trajectory_cfg
+            trajectory_view = TrajectoryVisualizer(cfg)
+
+        self.trajectory_view = trajectory_view
         self.buffer = dict()
         self.vid_next_frame = 0
         self.min_buffer = 0
@@ -346,7 +361,10 @@ class VideoLoad:
             print("[{}] [ERROR] No frame ({})".format(self.filename, data))
             return False
 
-        frame = data["frame"]
+        frame = data["frame"].copy()
+        show_guidelines = data.get("show_guidelines", True)
+        steer = data.get("steer", None)
+
         scale_view = self.scale_view
         flip = self.flip_view
 
@@ -355,39 +373,42 @@ class VideoLoad:
 
         cfg = self.cfg_camera
 
-        # Draw lines
-        camera_matrix = CAMERA_MATRIX[cfg.matrix]
-        rvec = np.array([cfg.rvec])
-        tvec = np.array([cfg.tvec])
-        y_pos = cfg.y_pos
-        wheel_w = cfg.wheel_w
-        car_offset_x = cfg.car_offset_x
-        max_z = cfg.max_z
-
-        # Straight lines
-        pts3d = np.array([
-            [wheel_w, y_pos, 1.3],
-            [wheel_w, y_pos, max_z],
-            [-wheel_w, y_pos, 1.3],
-            [-wheel_w, y_pos, max_z]
-        ])
-        pts3d[:, 0] = pts3d[:, 0] + car_offset_x
         y, x = frame.shape[0] /2., frame.shape[1] /2.
 
-        imagePoints, jacobian = cv2.projectPoints(pts3d, rvec, tvec, camera_matrix, None)
-        frame[int(y - 1): int(y + 1)] = 0
-        frame[:, int(x - 1): int(x + 1)] = 0
+        if show_guidelines:
+            frame[int(y - 2): int(y + 2), :] = (0, 0, 255)
+            frame[:, int(x - 2): int(x + 2)] = (0, 0, 255)
 
-        for i in range(1, imagePoints.shape[0], 2):
-            frame = cv2.line(frame,
-                             tuple(imagePoints[i - 1, 0].astype(np.int)),
-                             tuple(imagePoints[i, 0].astype(np.int)),
-                             (0, 0, 255), thickness=6)
+            trajectory_view = self.trajectory_view
+            if steer:
+                frame = trajectory_view.render_steer(frame, steer)
 
         frame_view = cv2.resize(frame, (0, 0), fx=scale_view, fy=scale_view)
-
         cv2.imshow(self.filename, frame_view)
+        cv2.waitKey(1)
         return True
+
+
+def async_camera_draw(experiment_path, camera_name, cfg_camera, camera_view_size, flip_view,
+                      recv_queue, send_queue):
+    v = VideoLoad(experiment_path, camera_name, cfg_camera, view_height=camera_view_size,
+                  flip_view=flip_view)
+
+    while True:
+        msg = recv_queue.get()
+        if msg[0] == -1:
+            break
+
+        dif_tp, frame = v.get_closest(msg[1])
+
+        # TODO Should find a nicer way to get steer msg
+        if msg[2] is not None:
+            frame["steer"] = msg[2]
+
+        v.show(frame)
+        r = True  # TODO Some more relevent response code!?
+
+        send_queue.put((camera_name, r))
 
 
 if __name__ == "__main__":
@@ -400,7 +421,6 @@ if __name__ == "__main__":
     cfg_extra.y_pos = 0.26
     cfg_extra.wheel_w = 0.19
     cfg_extra.car_offset_x = 0.
-    cfg_extra.max_z = 10.
     cfg_extra.matrix = 0
 
     v = VideoLoad("data/1533228223_log", "camera_0", cfg_extra, view_height=700, flip_view=0)

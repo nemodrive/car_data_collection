@@ -71,7 +71,7 @@ def client_diconnected(client, server):
 
 def std_message_received(client, server, message):
     """Called when a client sends a message"""
-    # plog("Client(%d) said: %s" % (client['id'], message))
+    plog("Client(%d) said: %s" % (client['id'], message))
 
 
 def run_server_classic(ip_address, port):
