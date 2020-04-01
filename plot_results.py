@@ -1,15 +1,16 @@
 import rospy
 from nav_msgs.msg import Odometry as message_type
-import pyrosbag as prb
+#import pyrosbag as prb
 import rosbag
-from gmplot import gmplot
+#from gmplot import gmplot
 import matplotlib.pyplot as plt
 
 
 topic_name = 'gps/filtered'
 # topic_name = 'test/odom_from_gps'
 # bag_name = '/home/teo/Downloads/gps-filtered-with-original-v7.bag'
-bag_name ='/home/teo/car_data_collection/data/rosbags/covariance-test-v15.bag'
+# bag_name ='/home/teo/car_data_collection/data/rosbags/covariance-test-v15.bag'
+bag_name ='/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/gps-filtered-with-original_2018-12-19-16-31-49.bag'
 
 def callback(data):
     rospy.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
@@ -31,12 +32,12 @@ def read_bag(name):
     long_real = []
     for topic, msg, _ in bag.read_messages():
         print(topic)
-        if topic == 'gps/filtered':
+        if topic == '/gps/filtered':
             x = msg.latitude
             y = msg.longitude
             lat_filtered.append(x)
             long_filtered.append(y)
-        if topic == 'test/gps':
+        if topic == '/test/gps':
             x = msg.latitude
             y = msg.longitude
             # print (x, y)

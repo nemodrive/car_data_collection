@@ -14,7 +14,8 @@ import importlib
 import std_msgs.msg, geometry_msgs.msg
 
 LOG = True
-
+EPS = 1e-5
+EPS_GPS_ODOM=1e-2
 
 def get_class(module_name, class_name):
     module = importlib.import_module(module_name)
@@ -262,7 +263,7 @@ class LocalizationProcessing:
         d.pose.pose.orientation.y = gyro_attitude["y"]
         d.pose.pose.orientation.z = gyro_attitude["z"]
         d.pose.pose.orientation.w = gyro_attitude["w"]
-        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * EPS_GPS_ODOM).flatten())
 
         # speed = self.speed_from_gps
         # d.twist.twist.linear_velocity.x = speed[0]
@@ -279,7 +280,7 @@ class LocalizationProcessing:
         d.twist.twist.angular.x = 0
         d.twist.twist.angular.y = 0
         d.twist.twist.angular.z = 0
-        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * EPS).flatten())
 
         return d
 
@@ -326,7 +327,7 @@ class LocalizationProcessing:
         d.pose.pose.position.y = last_location["longitude"]
         d.pose.pose.position.x = last_location["latitude"]
         d.pose.pose.position.z = last_location["altitude"]
-        d.pose.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
+        d.pose.covariance = list((np.eye(6, dtype=np.float64) * EPS).flatten())
 
         # Twist - linear velocity
         # speed = self.speed_from_gps
@@ -339,7 +340,7 @@ class LocalizationProcessing:
         d.twist.twist.angular.x = 0.0
         d.twist.twist.angular.y = 0.0
         d.twist.twist.angular.z = 0.0
-        d.twist.covariance = list((np.eye(6, dtype=np.float64) * 0.001).flatten())
+        d.twist.covariance = list((np.eye(6, dtype=np.float64) * EPS).flatten())
 
         return d
 
@@ -359,7 +360,7 @@ class LocalizationProcessing:
         d.longitude = last_location["longitude"]
         d.altitude = last_location["altitude"]
 
-        d.position_covariance = list((np.eye(3, dtype=np.float64) * 0.001).flatten())
+        d.position_covariance = list((np.eye(3, dtype=np.float64) * EPS).flatten())
         d.position_covariance_type = 0      # uint8 COVARIANCE_TYPE_UNKNOWN = 0
 
         return d
@@ -520,7 +521,8 @@ if __name__ == '__main__':
 
     cfg.simulate = ""
     #cfg.simulate = "/home/teo/nemodrive/phone_node_1536070874.9"
-    cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9_withEular"
+    #cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9_withEular"
+    cfg.simulate = "/home/alex/work/AI-MAS/projects/AutoDrive/dev/car_data_collection/data/phone_node/phone_node_1536070874.9"
 
     cfg.topics = dict({
         # "gps": ["/apollo/sensor/gnss/odometry", ["modules.localization.proto.gps_pb2", "Gps"]],
