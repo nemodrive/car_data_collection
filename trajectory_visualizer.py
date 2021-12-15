@@ -6,6 +6,7 @@
 import math
 import numpy as np
 import cv2
+import os
 from argparse import Namespace
 from car_utils import get_car_path, get_radius, get_car_line_mark, WHEEL_STEER_RATIO
 
@@ -108,6 +109,53 @@ class TrajectoryVisualizer:
         points = points.reshape(-1, 2)
         return points
 
+    def filter_points(self, image, points,
+                    filter_negative=FILTER_NEGATIVE_POINTS,
+                    filter_nonmonotonic=FILTER_NONMONOTONIC_POINTS):
+        points = self.project_points_on_image_space(points)
+        # print(points)
+
+        h, w, _ = image.shape
+
+        if filter_negative:
+            idx = 0
+            while (points[idx] < 0).any() or points[idx+1][1] < points[idx][1]:
+                idx += 1
+                if idx >= len(points) - 1:
+                    break
+
+            points = points[idx:]
+        else:
+            points = points[(points >= 0).all(axis=1)]
+
+        prev_x, prev_y = points[0]
+        idx = 1
+
+        if len(points) > 1 and filter_nonmonotonic:
+            while points[idx][1] < prev_y:
+                prev_x, prev_y = points[idx]
+                idx += 1
+                if idx >= len(points):
+                    break
+
+            valid_points = []
+            while points[idx][0] >= 0 and points[idx][0] < w and idx < len(points)-1:
+                valid_points.append([points[idx][0], points[idx][1]])
+                idx += 1
+        else:
+            valid_points = [[prev_x, prev_y]]
+
+        if filter_nonmonotonic:
+            points = np.array(valid_points)
+
+        if len(points) <= 0:
+            return points
+
+        points[:, 0] = np.clip(points[:, 0], 0, w)
+        points[:, 1] = np.clip(points[:, 1], 0, h)
+
+        return points
+
     def render_line(self, image, points, color=None, thickness=None,
                     filter_negative=FILTER_NEGATIVE_POINTS,
                     filter_nonmonotonic=FILTER_NONMONOTONIC_POINTS):
@@ -201,6 +249,28 @@ class TrajectoryVisualizer:
         r = get_radius(steer_angle / WHEEL_STEER_RATIO)
         return self.render(image, r)
 
+    def render_path(self, image, radius):
+        curve_length = self.curve_length
+        c, lw, rw = get_car_path(radius, distance=curve_length)
+        lw = self.add_3rd_dim(lw)
+        rw = self.add_3rd_dim(rw)
+
+        lw = self.filter_points(image, lw)
+        rw = self.filter_points(image, rw)
+
+        overlay = np.zeros_like(image)
+
+        for p1, p2, p3, p4 in zip(lw[:-1], rw[:-1], lw[1:], rw[1:]):
+            x1, y1 = p1
+            x2, y2 = p2
+            x3, y3 = p3
+            x4, y4 = p4
+            pts = np.array([(x1, y1), (x3, y3), (x4, y4), (x2, y2)])
+
+            overlay = cv2.drawContours(overlay, [pts], 0, (0, 255, 0), cv2.FILLED)
+
+        return image, overlay
+
     def render(self, image, radius):
         mark_count = self.mark_count
         start_dist = self.start_dist
@@ -253,55 +323,50 @@ def main_revised():
     max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
     angles = np.linspace(-max_wheel_angle, max_wheel_angle, num)
     idx = int(angles.size / 2)
-    r = -10.0
+    r = 1
 
     data = {
         "r": r,
     }
 
-    cap = cv2.VideoCapture(0) # 0 for built-in webcam, 1 for secondary, 2 for third ...
-    cv2.destroyAllWindows()
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-    def get_frame_from_image():
-        rgb = cv2.imread("/media/nemodrive0/Samsung_T5/nemodrive/24_nov/session1/1543056917.67_camera_3_off_183ms.jpg")
+    def get_frame_from_image(path):
+        rgb = cv2.imread(path)
         return rgb
 
-    def get_frame_from_webcam():
-        ret, rgb = cap.read()
-        h, w = rgb.shape[:2]
-        rgb[h//2:h//2 + 2, :] = np.array([0, 255, 128], dtype = np.uint8)
-        rgb[:, w // 2:w // 2 + 2] = np.array([0, 255, 128], dtype=np.uint8)
-
-        return rgb
-
-    def loop():
+    def loop(path):
         r = data['r']
-        background_img = get_frame_from_image()
-        #background_img = get_frame_from_webcam()
-        # print(r)
-        image = tv.render(background_img, r)
-        image = cv2.resize(image, (1280, 720))
-        cv2.imshow("image", image)
+        background_img = get_frame_from_image(path)
+        image, overlay = tv.render_path(background_img, r)
+        cv2.imshow("image", overlay)
+        cv2.waitKey(0)
 
     def update(val):
         data['r'] = get_radius(angles[400 - val - 1])
         loop()
 
-    def update_steer(val):
+    def update_steer(path, camera_matrix, val):
+        tv.camera_matrix = camera_matrix
         data['r'] = get_radius((val-500) / WHEEL_STEER_RATIO)
-        loop()
+        loop(path)
 
-    cv2.namedWindow('image')
-    # cv2.createTrackbar('angle', 'image', idx, 400 - 1, update)
-    cv2.createTrackbar('angle', 'image', 0, 1000, update_steer)
+    test_dir = '/mnt/storage/workspace/andreim/nemodrive/upb_data/dataset/test_frames/'
+    soft_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_tensor_all'
+    hard_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_pic_hard_all'
 
-    while True:
-        loop()
-        k = cv2.waitKey(1) & 0xFF
-        if k == 27:
-            break
+    test_dirs = os.listdir(test_dir)
+
+    for d in test_dirs:
+        if '.txt' not in d:
+            dir_path = os.path.join(test_dir, d)
+            test_files = os.listdir(dir_path)
+            cam_file = os.path.join(dir_path, 'cam.txt')
+            camera_matrix = np.loadtxt(cam_file)
+            print(camera_matrix)
+            for f in test_files:
+                if '.txt' not in f:
+                    file_path = os.path.join(dir_path, f)
+                    for angle in angles:
+                        update_steer(file_path, camera_matrix, angle)
 
 
 if __name__ == "__main__":
