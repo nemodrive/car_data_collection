@@ -117,6 +117,8 @@ class TrajectoryVisualizer:
 
         h, w, _ = image.shape
 
+        w_err = 54
+
         if filter_negative:
             idx = 0
             while (points[idx] < 0).any() or points[idx+1][1] < points[idx][1]:
@@ -139,7 +141,7 @@ class TrajectoryVisualizer:
                     break
 
             valid_points = []
-            while points[idx][0] >= 0 and points[idx][0] < w and idx < len(points)-1:
+            while -w_err <= points[idx][0] < w + w_err and idx < len(points)-1:
                 valid_points.append([points[idx][0], points[idx][1]])
                 idx += 1
         else:
@@ -150,6 +152,7 @@ class TrajectoryVisualizer:
 
         if len(points) <= 0:
             return points
+
 
         points[:, 0] = np.clip(points[:, 0], 0, w)
         points[:, 1] = np.clip(points[:, 1], 0, h)
@@ -269,6 +272,8 @@ class TrajectoryVisualizer:
 
             overlay = cv2.drawContours(overlay, [pts], 0, (0, 255, 0), cv2.FILLED)
 
+        image = cv2.addWeighted(image, 1, overlay, 1, 0)
+
         return image, overlay
 
     def render(self, image, radius):
@@ -319,9 +324,9 @@ def main_revised():
     cfg.__dict__ = cfg_i
 
     tv = TrajectoryVisualizer(cfg)
-    num = 400
+    num = 200
     max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
-    angles = np.linspace(-max_wheel_angle, max_wheel_angle, num)
+    angles = np.linspace(-MAX_STEER, MAX_STEER, num)
     idx = int(angles.size / 2)
     r = 1
 
@@ -337,7 +342,7 @@ def main_revised():
         r = data['r']
         background_img = get_frame_from_image(path)
         image, overlay = tv.render_path(background_img, r)
-        cv2.imshow("image", overlay)
+        cv2.imshow("image", image)
         cv2.waitKey(0)
 
     def update(val):
@@ -346,7 +351,7 @@ def main_revised():
 
     def update_steer(path, camera_matrix, val):
         tv.camera_matrix = camera_matrix
-        data['r'] = get_radius((val-500) / WHEEL_STEER_RATIO)
+        data['r'] = get_radius(val / WHEEL_STEER_RATIO)
         loop(path)
 
     test_dir = '/mnt/storage/workspace/andreim/nemodrive/upb_data/dataset/test_frames/'
@@ -361,7 +366,6 @@ def main_revised():
             test_files = os.listdir(dir_path)
             cam_file = os.path.join(dir_path, 'cam.txt')
             camera_matrix = np.loadtxt(cam_file)
-            print(camera_matrix)
             for f in test_files:
                 if '.txt' not in f:
                     file_path = os.path.join(dir_path, f)
