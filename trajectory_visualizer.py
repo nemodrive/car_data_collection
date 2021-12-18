@@ -7,6 +7,7 @@ import math
 import numpy as np
 import cv2
 import os
+import torch
 from argparse import Namespace
 from car_utils import get_car_path, get_radius, get_car_line_mark, WHEEL_STEER_RATIO
 
@@ -117,7 +118,7 @@ class TrajectoryVisualizer:
 
         h, w, _ = image.shape
 
-        w_err = 54
+        w_err = 50
 
         if filter_negative:
             idx = 0
@@ -316,6 +317,29 @@ class TrajectoryVisualizer:
         return image
 
 
+def normalize(tensor):
+    tensor -= tensor.min(1, keepdim=True)[0]
+    tensor /= tensor.max(1, keepdim=True)[0]
+    return tensor
+
+
+def compute_score(overlay, predicted):
+    return predicted[overlay != 0].mean()
+
+
+def compute_miou(overlay, predicted):
+    predicted = predicted / predicted.max()
+    c1 = overlay.astype(bool)
+    c2 = predicted.astype(bool)
+
+    overlap = c1 * c2
+    union = c1 + c2
+
+    miou = overlap.sum() / float(union.sum())
+
+    return miou
+
+
 def main_revised():
 
     cfg_i = DEFAULT_CFG
@@ -324,10 +348,9 @@ def main_revised():
     cfg.__dict__ = cfg_i
 
     tv = TrajectoryVisualizer(cfg)
-    num = 200
+    num = 1001
     max_wheel_angle = np.rad2deg(np.arctan(CAR_L / MIN_TURNING_RADIUS))
     angles = np.linspace(-MAX_STEER, MAX_STEER, num)
-    idx = int(angles.size / 2)
     r = 1
 
     data = {
@@ -342,36 +365,67 @@ def main_revised():
         r = data['r']
         background_img = get_frame_from_image(path)
         image, overlay = tv.render_path(background_img, r)
-        cv2.imshow("image", image)
-        cv2.waitKey(0)
-
-    def update(val):
-        data['r'] = get_radius(angles[400 - val - 1])
-        loop()
+        # cv2.imshow("image", image)
+        # cv2.waitKey(0)
+        return image, overlay
 
     def update_steer(path, camera_matrix, val):
         tv.camera_matrix = camera_matrix
         data['r'] = get_radius(val / WHEEL_STEER_RATIO)
-        loop(path)
+        return loop(path)
 
     test_dir = '/mnt/storage/workspace/andreim/nemodrive/upb_data/dataset/test_frames/'
-    soft_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_tensor_all'
-    hard_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_pic_hard_all'
+    soft_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_tensor_all/deeplabv3_resnet50_upb/'
+    hard_labels_dir = '/home/nemodrive/workspace/andreim/awesome-semantic-segmentation-pytorch/runs/pred_pic_hard_all/deeplabv3_resnet50_upb/'
+
+    save_dir_soft = '/home/nemodrive/workspace/andreim/self_supervised_steering_results/soft'
+    save_dir_hard = '/home/nemodrive/workspace/andreim/self_supervised_steering_results/hard'
 
     test_dirs = os.listdir(test_dir)
 
-    for d in test_dirs:
+    for d in sorted(test_dirs):
         if '.txt' not in d:
             dir_path = os.path.join(test_dir, d)
             test_files = os.listdir(dir_path)
             cam_file = os.path.join(dir_path, 'cam.txt')
             camera_matrix = np.loadtxt(cam_file)
-            for f in test_files:
+            for f in sorted(test_files):
+                print(f)
                 if '.txt' not in f:
                     file_path = os.path.join(dir_path, f)
-                    for angle in angles:
-                        update_steer(file_path, camera_matrix, angle)
 
+                    sequence_frame = '/'.join(file_path.split('/')[-2:])
+
+                    sequence_frame_path_soft = os.path.join(soft_labels_dir, sequence_frame).replace('.png', '.pt')
+                    sequence_frame_path_hard = os.path.join(hard_labels_dir, sequence_frame)
+
+                    sequence_frame_soft = normalize(torch.load(sequence_frame_path_soft)).cpu().numpy()
+                    sequence_frame_hard = cv2.imread(sequence_frame_path_hard)[:, :, 1]
+
+                    frame_results_soft = []
+                    frame_results_hard = []
+
+                    for angle in angles:
+                        image, overlay = update_steer(file_path, camera_matrix, angle)
+                        image = cv2.addWeighted(image, 1, np.repeat(sequence_frame_hard[:, :, None], 3, axis=2), 1, 0)
+
+                        # cv2.imshow('image', image)
+                        # cv2.waitKey(0)
+
+                        overlay = overlay[:, :, 1]
+                        overlay = overlay / overlay.max()
+
+                        soft_score = compute_score(overlay, sequence_frame_soft)
+                        miou = compute_miou(overlay, sequence_frame_hard)
+
+                        frame_results_soft.append(soft_score)
+                        frame_results_hard.append(miou)
+
+                    res_soft = np.array([angles, frame_results_soft])
+                    res_hard = np.array([angles, frame_results_hard])
+
+                    np.save(os.path.join(save_dir_soft, sequence_frame).replace('.png', '.npy'), res_soft)
+                    np.save(os.path.join(save_dir_hard, sequence_frame).replace('.png', '.npy'), res_hard)
 
 if __name__ == "__main__":
     main_revised()
